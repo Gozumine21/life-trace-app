@@ -1,0 +1,73 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isFollowing(targetUserId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + targetUserId));
+    }
+
+    // users
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create, update: if isOwner(userId);
+      allow delete: if false;
+
+      match /notifications/{notificationId} {
+        allow read, update: if isOwner(userId);
+        allow create: if isSignedIn();
+        allow delete: if isOwner(userId);
+      }
+    }
+
+    // lifeEvents
+    match /lifeEvents/{eventId} {
+      allow read: if isSignedIn() && (
+        resource.data.visibility == 'public' ||
+        resource.data.authorId == request.auth.uid ||
+        (resource.data.visibility == 'followers' && isFollowing(resource.data.authorId))
+      );
+      allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+      allow update: if isSignedIn() && resource.data.authorId == request.auth.uid;
+      // likeCount/commentCount は他ユーザーの操作（いいね・コメント）でも更新されるため、
+      // 著者以外でも当該フィールドのみの増減更新は許可する。
+      allow update: if isSignedIn() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount', 'commentCount']);
+      allow delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+
+      match /comments/{commentId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+        allow update, delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+      }
+
+      match /reactions/{userId} {
+        allow read: if isSignedIn();
+        allow create, update, delete: if isOwner(userId);
+      }
+    }
+
+    // follows
+    match /follows/{followId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() && request.resource.data.followerId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.followerId == request.auth.uid;
+      allow update: if false;
+    }
+
+    // experienceLogs
+    match /experienceLogs/{logId} {
+      allow read, create, update: if isSignedIn() && request.resource.data.viewerId == request.auth.uid;
+      allow delete: if false;
+    }
+  }
+}
