@@ -43,3 +43,13 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Large media / recordings (do not upload to GitHub)
+*.mov
+*.mp4
+
+# Secrets (keep out of GitHub)
+*.p12
+*.keystore
+*.jks
+*.mobileprovision
