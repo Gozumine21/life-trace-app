@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../widgets/common/empty_view.dart';
 import '../../../widgets/common/error_view.dart';
 import '../../../widgets/common/loading_view.dart';
+import '../../moderation/providers/moderation_providers.dart';
 import '../../timeline/providers/life_event_providers.dart';
 import '../../timeline/widgets/life_event_card.dart';
 
@@ -14,10 +15,13 @@ class FeedScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final feed = ref.watch(publicFeedProvider);
+    final blockedIds = ref.watch(blockedUserIdsProvider).asData?.value ?? const [];
     return Scaffold(
       appBar: AppBar(title: const Text('LifeTrace')),
       body: feed.when(
-        data: (events) {
+        data: (allEvents) {
+          final events =
+              allEvents.where((e) => !blockedIds.contains(e.authorId)).toList();
           if (events.isEmpty) {
             return const EmptyView(
               message: 'まだ公開されているライフイベントがありません',

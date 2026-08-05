@@ -11,6 +11,7 @@ import '../../features/experience_mode/screens/experience_mode_screen.dart';
 import '../../features/home/screens/feed_screen.dart';
 import '../../features/home/screens/home_shell.dart';
 import '../../features/life_event_form/screens/life_event_form_screen.dart';
+import '../../features/moderation/screens/report_management_screen.dart';
 import '../../features/notifications/screens/notifications_screen.dart';
 import '../../features/profile/screens/edit_profile_screen.dart';
 import '../../features/profile/screens/settings_screen.dart';
@@ -96,6 +97,10 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings',
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: '/admin/reports',
+        builder: (context, state) => const ReportManagementScreen(),
       ),
     ],
   );

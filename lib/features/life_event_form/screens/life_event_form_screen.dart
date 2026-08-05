@@ -8,6 +8,7 @@ import 'package:image_picker/image_picker.dart';
 import '../../../core/providers/firebase_providers.dart';
 import '../../../core/utils/constants.dart';
 import '../../../models/life_event.dart';
+import '../../../widgets/common/app_image.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../timeline/providers/life_event_providers.dart';
 
@@ -255,7 +256,7 @@ class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
                     children: [
                       ClipRRect(
                         borderRadius: BorderRadius.circular(8),
-                        child: Image.network(url, width: 80, height: 80, fit: BoxFit.cover),
+                        child: AppImage(url: url, width: 80, height: 80, fit: BoxFit.cover),
                       ),
                       Positioned(
                         right: -4,

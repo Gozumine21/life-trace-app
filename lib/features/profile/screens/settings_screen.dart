@@ -1,18 +1,36 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../core/providers/firebase_providers.dart';
 import '../../auth/providers/auth_providers.dart';
+import '../../auth/screens/terms_screen.dart';
+import '../../moderation/providers/moderation_providers.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final isAdmin = ref.watch(isAdminProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('設定')),
       body: ListView(
         children: [
+          ListTile(
+            leading: const Icon(Icons.description_outlined),
+            title: const Text('利用規約'),
+            onTap: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const TermsScreen()),
+            ),
+          ),
+          if (isAdmin)
+            ListTile(
+              leading: const Icon(Icons.flag_outlined),
+              title: const Text('通報管理'),
+              onTap: () => context.push('/admin/reports'),
+            ),
+          const Divider(),
           ListTile(
             leading: const Icon(Icons.logout),
             title: const Text('ログアウト'),

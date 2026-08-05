@@ -3,10 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/utils/constants.dart';
+import '../../../models/report.dart';
+import '../../../widgets/common/app_image.dart';
 import '../../../widgets/common/emotion_score_badge.dart';
 import '../../../widgets/common/error_view.dart';
 import '../../../widgets/common/loading_view.dart';
 import '../../auth/providers/auth_providers.dart';
+import '../../moderation/widgets/report_dialog.dart';
+import '../../profile/providers/profile_providers.dart';
 import '../providers/life_event_providers.dart';
 import '../widgets/life_event_card.dart';
 
@@ -35,20 +39,60 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
     final myReactionAsync = ref.watch(myReactionProvider(widget.eventId));
     final currentUser = ref.watch(currentUserProvider);
 
+    final loadedEvent = eventAsync.valueOrNull;
+    final isOwnerOfLoadedEvent =
+        loadedEvent != null && currentUser?.uid == loadedEvent.authorId;
+
     return Scaffold(
-      appBar: AppBar(title: const Text('ライフイベント詳細')),
+      appBar: AppBar(
+        title: const Text('ライフイベント詳細'),
+        actions: [
+          if (loadedEvent != null && !isOwnerOfLoadedEvent && currentUser != null)
+            IconButton(
+              icon: const Icon(Icons.flag_outlined),
+              tooltip: '通報する',
+              onPressed: () => showReportDialog(
+                context: context,
+                ref: ref,
+                targetType: ReportTargetType.lifeEvent,
+                targetId: loadedEvent.eventId,
+                eventId: loadedEvent.eventId,
+              ),
+            ),
+        ],
+      ),
       body: eventAsync.when(
         data: (event) {
           if (event == null) {
             return const Center(child: Text('このライフイベントは見つかりませんでした'));
           }
           final isOwner = currentUser?.uid == event.authorId;
+          final authorAsync = ref.watch(userProfileProvider(event.authorId));
           return Column(
             children: [
               Expanded(
                 child: ListView(
                   padding: const EdgeInsets.all(16),
                   children: [
+                    if (!isOwner)
+                      InkWell(
+                        onTap: () => context.push('/user/${event.authorId}'),
+                        child: Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.person_outline, size: 18),
+                              const SizedBox(width: 4),
+                              Text(
+                                authorAsync.valueOrNull?.displayName ?? '投稿者を見る',
+                                style: const TextStyle(
+                                  decoration: TextDecoration.underline,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
                     Row(
                       children: [
                         if (event.isTurningPoint)
@@ -88,8 +132,8 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
                           separatorBuilder: (context, _) => const SizedBox(width: 8),
                           itemBuilder: (context, i) => ClipRRect(
                             borderRadius: BorderRadius.circular(8),
-                            child: Image.network(
-                              event.imageUrls[i],
+                            child: AppImage(
+                              url: event.imageUrls[i],
                               width: 160,
                               fit: BoxFit.cover,
                             ),
@@ -148,10 +192,18 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
                                 ),
                               );
                               if (confirmed == true) {
-                                await ref
-                                    .read(lifeEventControllerProvider.notifier)
-                                    .deleteLifeEvent(widget.eventId);
-                                if (context.mounted) context.pop();
+                                try {
+                                  await ref
+                                      .read(lifeEventControllerProvider.notifier)
+                                      .deleteLifeEvent(widget.eventId);
+                                  if (context.mounted) context.pop();
+                                } catch (e) {
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(content: Text('削除に失敗しました: $e')),
+                                    );
+                                  }
+                                }
                               }
                             },
                           ),
@@ -182,7 +234,10 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
                         );
                       },
                       loading: () => const LoadingView(),
-                      error: (e, st) => ErrorView(error: e),
+                      error: (e, st) => ErrorView(
+                        error: e,
+                        onRetry: () => ref.invalidate(eventCommentsProvider(widget.eventId)),
+                      ),
                     ),
                   ],
                 ),
@@ -224,7 +279,10 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
           );
         },
         loading: () => const LoadingView(),
-        error: (e, st) => ErrorView(error: e),
+        error: (e, st) => ErrorView(
+          error: e,
+          onRetry: () => ref.invalidate(lifeEventProvider(widget.eventId)),
+        ),
       ),
     );
   }

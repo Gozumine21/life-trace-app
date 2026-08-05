@@ -1,3 +1,4 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -30,8 +31,27 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         .signIn(_emailController.text.trim(), _passwordController.text);
     final state = ref.read(authControllerProvider);
     if (state.hasError && mounted) {
+      final error = state.error;
+      String message;
+      if (error is FirebaseAuthException) {
+        switch (error.code) {
+          case 'user-not-found':
+          case 'invalid-credential':
+            message = 'メールアドレスまたはパスワードが正しくありません。';
+          case 'wrong-password':
+            message = 'パスワードが正しくありません。';
+          case 'network-request-failed':
+            message = 'ネットワークエラーです。MacのエミュレータとWiFiが同じか確認してください。';
+          case 'too-many-requests':
+            message = 'ログイン試行が多すぎます。しばらく待ってから再試行してください。';
+          default:
+            message = 'ログインに失敗しました: ${error.message}';
+        }
+      } else {
+        message = 'ログインに失敗しました: $error';
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('ログインに失敗しました: ${state.error}')),
+        SnackBar(content: Text(message), duration: const Duration(seconds: 5)),
       );
     }
   }
@@ -47,6 +67,22 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
           key: _formKey,
           child: ListView(
             children: [
+              const SizedBox(height: 8),
+              const Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.timeline, size: 64, color: Colors.deepPurple),
+                    SizedBox(height: 8),
+                    Text(
+                      'LifeTrace',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 24),
               TextFormField(
                 controller: _emailController,

@@ -86,12 +86,14 @@ class LifeEventController extends AsyncNotifier<void> {
     state = await AsyncValue.guard(
       () => service.updateLifeEvent(eventId, data),
     );
+    state.whenOrNull(error: (e, st) => Error.throwWithStackTrace(e, st));
   }
 
   Future<void> deleteLifeEvent(String eventId) async {
     final service = ref.read(firestoreServiceProvider);
     state = const AsyncLoading();
     state = await AsyncValue.guard(() => service.deleteLifeEvent(eventId));
+    state.whenOrNull(error: (e, st) => Error.throwWithStackTrace(e, st));
   }
 
   Future<void> addComment(String eventId, String body) async {

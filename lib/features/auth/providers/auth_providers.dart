@@ -5,7 +5,15 @@ import '../../../core/providers/firebase_providers.dart';
 import '../../../models/user_profile.dart';
 
 final authStateChangesProvider = StreamProvider<User?>((ref) {
-  return ref.watch(authServiceProvider).authStateChanges();
+  // ログイン済みユーザーが検出された直後はFirestoreへ渡すIDトークンの
+  // 準備が間に合わず permission-denied になることがあるため、
+  // トークン取得が完了してから値を流す。
+  return ref.watch(authServiceProvider).authStateChanges().asyncMap((user) async {
+    if (user != null) {
+      await user.getIdToken();
+    }
+    return user;
+  });
 });
 
 final currentUserProvider = Provider<User?>((ref) {

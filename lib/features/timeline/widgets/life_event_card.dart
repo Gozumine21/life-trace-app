@@ -1,17 +1,26 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../models/life_event.dart';
 import '../../../widgets/common/emotion_score_badge.dart';
+import '../../auth/providers/auth_providers.dart';
+import '../../profile/providers/profile_providers.dart';
 
-class LifeEventCard extends StatelessWidget {
+class LifeEventCard extends ConsumerWidget {
   final LifeEvent event;
   final VoidCallback? onTap;
 
   const LifeEventCard({super.key, required this.event, this.onTap});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final currentUser = ref.watch(currentUserProvider);
+    final isOwnEvent = currentUser?.uid == event.authorId;
+    final authorAsync =
+        isOwnEvent ? null : ref.watch(userProfileProvider(event.authorId));
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
       child: InkWell(
@@ -22,6 +31,27 @@ class LifeEventCard extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (!isOwnEvent)
+                InkWell(
+                  onTap: () => context.push('/user/${event.authorId}'),
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 6),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.person_outline, size: 14),
+                        const SizedBox(width: 4),
+                        Text(
+                          authorAsync?.valueOrNull?.displayName ?? '投稿者',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Theme.of(context).colorScheme.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               Row(
                 children: [
                   if (event.isTurningPoint)

@@ -1,7 +1,9 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../providers/auth_providers.dart';
+import 'terms_screen.dart';
 
 class SignupScreen extends ConsumerStatefulWidget {
   const SignupScreen({super.key});
@@ -15,6 +17,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  bool _agreedToTerms = false;
 
   @override
   void dispose() {
@@ -26,6 +29,12 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
 
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
+    if (!_agreedToTerms) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('利用規約に同意してください')),
+      );
+      return;
+    }
     await ref.read(authControllerProvider.notifier).signUp(
           _emailController.text.trim(),
           _passwordController.text,
@@ -33,8 +42,29 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
         );
     final state = ref.read(authControllerProvider);
     if (state.hasError && mounted) {
+      final error = state.error;
+      String message;
+      if (error is FirebaseAuthException) {
+        switch (error.code) {
+          case 'email-already-in-use':
+            message = 'このメールアドレスは既に登録されています。ログイン画面からサインインしてください。';
+          case 'network-request-failed':
+            message = 'ネットワークエラーです。WiFi接続を確認してください。';
+          case 'weak-password':
+            message = 'パスワードが弱すぎます。6文字以上にしてください。';
+          case 'invalid-email':
+            message = 'メールアドレスの形式が正しくありません。';
+          default:
+            message = '登録に失敗しました: ${error.message}';
+        }
+      } else {
+        message = '登録に失敗しました: $error';
+      }
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('登録に失敗しました: ${state.error}')),
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 5),
+        ),
       );
     }
   }
@@ -73,7 +103,26 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                 validator: (v) =>
                     (v == null || v.length < 6) ? '6文字以上で入力してください' : null,
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Checkbox(
+                    value: _agreedToTerms,
+                    onChanged: (v) => setState(() => _agreedToTerms = v ?? false),
+                  ),
+                  const Text('利用規約に同意します'),
+                ],
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const TermsScreen()),
+                  ),
+                  child: const Text('利用規約を読む'),
+                ),
+              ),
+              const SizedBox(height: 16),
               FilledButton(
                 onPressed: authState.isLoading ? null : _submit,
                 child: authState.isLoading

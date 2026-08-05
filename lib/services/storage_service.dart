@@ -1,29 +1,20 @@
 import 'dart:io';
 
-import 'package:firebase_storage/firebase_storage.dart';
+import '../core/utils/image_codec.dart';
 
+/// 画像はFirebase Storage（Blazeプラン必須）を使わず、リサイズ・圧縮した上で
+/// data URIとしてFirestoreドキュメントに直接埋め込む。無料のSparkプランのみで動作する。
 class StorageService {
-  final FirebaseStorage _storage;
-
-  StorageService(this._storage);
-
-  Future<String> uploadUserIcon(String uid, File file) async {
-    final ref = _storage.ref('users/$uid/icon.jpg');
-    await ref.putFile(file);
-    return ref.getDownloadURL();
+  Future<String> uploadUserIcon(String uid, File file) {
+    return ImageCodec.encodeToDataUri(file);
   }
 
   Future<String> uploadLifeEventImage(
     String authorId,
     String eventId,
     File file,
-  ) async {
-    final fileName = '${DateTime.now().millisecondsSinceEpoch}.jpg';
-    final ref = _storage.ref(
-      'lifeEvents/$authorId/$eventId/$fileName',
-    );
-    await ref.putFile(file);
-    return ref.getDownloadURL();
+  ) {
+    return ImageCodec.encodeToDataUri(file);
   }
 
   Future<List<String>> uploadLifeEventImages(

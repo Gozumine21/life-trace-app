@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../widgets/common/app_image.dart';
 import '../../../widgets/common/empty_view.dart';
 import '../../../widgets/common/error_view.dart';
 import '../../../widgets/common/loading_view.dart';
@@ -42,7 +43,7 @@ class MyPageScreen extends ConsumerWidget {
                       CircleAvatar(
                         radius: 32,
                         backgroundImage: profile?.iconUrl != null
-                            ? NetworkImage(profile!.iconUrl!)
+                            ? AppImage(url: profile!.iconUrl!).toImageProvider()
                             : null,
                         child: profile?.iconUrl == null
                             ? const Icon(Icons.person, size: 32)
@@ -129,14 +130,16 @@ class MyPageScreen extends ConsumerWidget {
                   );
                 },
                 loading: () => const SliverToBoxAdapter(child: LoadingView()),
-                error: (e, st) => SliverToBoxAdapter(child: ErrorView(error: e)),
+                error: (e, st) => SliverToBoxAdapter(
+                  child: ErrorView(error: e, onRetry: () => ref.invalidate(userLifeEventsProvider(user.uid))),
+                ),
               ),
               const SliverToBoxAdapter(child: SizedBox(height: 80)),
             ],
           );
         },
         loading: () => const LoadingView(),
-        error: (e, st) => ErrorView(error: e),
+        error: (e, st) => ErrorView(error: e, onRetry: () => ref.invalidate(currentUserProfileProvider)),
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => context.push('/life-event/new'),

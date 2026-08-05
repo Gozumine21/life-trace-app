@@ -1,10 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../core/utils/stream_retry.dart';
+import '../models/block.dart';
 import '../models/comment.dart';
 import '../models/follow.dart';
 import '../models/life_event.dart';
 import '../models/notification.dart';
 import '../models/reaction.dart';
+import '../models/report.dart';
 import '../models/user_profile.dart';
 
 class FirestoreService {
@@ -24,6 +27,12 @@ class FirestoreService {
   CollectionReference<Map<String, dynamic>> get _experienceLogs =>
       _db.collection('experienceLogs');
 
+  CollectionReference<Map<String, dynamic>> get _blocks =>
+      _db.collection('blocks');
+
+  CollectionReference<Map<String, dynamic>> get _reports =>
+      _db.collection('reports');
+
   // ---------------- users ----------------
 
   Future<void> createUserProfile(UserProfile profile) {
@@ -31,14 +40,15 @@ class FirestoreService {
   }
 
   Future<void> updateUserProfile(String uid, Map<String, dynamic> data) {
-    return _users.doc(uid).update(data);
+    // update() はドキュメントが存在しない場合に失敗するため set(merge:true) を使う
+    return _users.doc(uid).set(data, SetOptions(merge: true));
   }
 
   Stream<UserProfile?> watchUserProfile(String uid) {
-    return _users.doc(uid).snapshots().map((snap) {
-      if (!snap.exists) return null;
-      return UserProfile.fromMap(snap.id, snap.data()!);
-    });
+    return withPermissionRetry(() => _users.doc(uid).snapshots().map((snap) {
+          if (!snap.exists) return null;
+          return UserProfile.fromMap(snap.id, snap.data()!);
+        }));
   }
 
   Future<UserProfile?> getUserProfile(String uid) async {
@@ -73,19 +83,19 @@ class FirestoreService {
 
   /// 1人のライフイベントを発生年月の昇順で取得（タイムライン・グラフ用）。
   Stream<List<LifeEvent>> watchUserLifeEvents(String authorId) {
-    return _lifeEvents
+    return withPermissionRetry(() => _lifeEvents
         .where('authorId', isEqualTo: authorId)
         .orderBy('occurredYearMonth')
         .snapshots()
         .map(
           (snap) =>
               snap.docs.map((d) => LifeEvent.fromMap(d.id, d.data())).toList(),
-        );
+        ));
   }
 
   /// ホームフィード：公開ライフイベントを新着順で取得。
   Stream<List<LifeEvent>> watchPublicFeed({int limit = 30}) {
-    return _lifeEvents
+    return withPermissionRetry(() => _lifeEvents
         .where('visibility', isEqualTo: 'public')
         .orderBy('createdAt', descending: true)
         .limit(limit)
@@ -93,7 +103,7 @@ class FirestoreService {
         .map(
           (snap) =>
               snap.docs.map((d) => LifeEvent.fromMap(d.id, d.data())).toList(),
-        );
+        ));
   }
 
   /// カテゴリで検索（公開イベントのみ）。
@@ -228,13 +238,13 @@ class FirestoreService {
   }
 
   Stream<List<String>> watchFollowingIds(String followerId) {
-    return _follows
+    return withPermissionRetry(() => _follows
         .where('followerId', isEqualTo: followerId)
         .snapshots()
         .map(
           (snap) =>
               snap.docs.map((d) => d.data()['followeeId'] as String).toList(),
-        );
+        ));
   }
 
   // ---------------- notifications (サブコレクション) ----------------
@@ -253,14 +263,14 @@ class FirestoreService {
   }
 
   Stream<List<AppNotification>> watchNotifications(String uid) {
-    return _notifications(uid)
+    return withPermissionRetry(() => _notifications(uid)
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map(
           (snap) => snap.docs
               .map((d) => AppNotification.fromMap(d.id, d.data()))
               .toList(),
-        );
+        ));
   }
 
   // ---------------- experienceLogs ----------------
@@ -290,5 +300,53 @@ class FirestoreService {
         'updatedAt': now,
       });
     }
+  }
+
+  // ---------------- blocks ----------------
+
+  Future<void> blockUser(String blockerId, String blockedId) {
+    final id = Block.idFor(blockerId, blockedId);
+    final block = Block(
+      blockId: id,
+      blockerId: blockerId,
+      blockedId: blockedId,
+      createdAt: DateTime.now(),
+    );
+    return _blocks.doc(id).set(block.toMap());
+  }
+
+  Future<void> unblockUser(String blockerId, String blockedId) {
+    final id = Block.idFor(blockerId, blockedId);
+    return _blocks.doc(id).delete();
+  }
+
+  Stream<List<String>> watchBlockedUserIds(String blockerId) {
+    return withPermissionRetry(() => _blocks
+        .where('blockerId', isEqualTo: blockerId)
+        .snapshots()
+        .map(
+          (snap) =>
+              snap.docs.map((d) => d.data()['blockedId'] as String).toList(),
+        ));
+  }
+
+  // ---------------- reports ----------------
+
+  Future<void> submitReport(Report report) {
+    return _reports.doc().set(report.toMap());
+  }
+
+  Stream<List<Report>> watchAllReports() {
+    return _reports
+        .orderBy('createdAt', descending: true)
+        .snapshots()
+        .map(
+          (snap) =>
+              snap.docs.map((d) => Report.fromMap(d.id, d.data())).toList(),
+        );
+  }
+
+  Future<void> resolveReport(String reportId) {
+    return _reports.doc(reportId).update({'status': ReportStatus.resolved});
   }
 }

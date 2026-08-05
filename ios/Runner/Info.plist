@@ -31,6 +31,12 @@
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>ライフイベントの写真やプロフィール画像を選択するために写真ライブラリへのアクセスが必要です。</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>選択した画像を保存するために写真ライブラリへのアクセスが必要です。</string>
+	<key>NSCameraUsageDescription</key>
+	<string>写真を撮影してライフイベントに追加するためにカメラへのアクセスが必要です。</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -88,7 +88,7 @@ class SearchScreen extends ConsumerWidget {
                 );
               },
               loading: () => const LoadingView(),
-              error: (e, st) => ErrorView(error: e),
+              error: (e, st) => ErrorView(error: e, onRetry: () => ref.invalidate(searchResultsProvider)),
             ),
           ),
         ],

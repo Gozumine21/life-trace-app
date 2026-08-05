@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/firebase_providers.dart';
 import '../../../core/utils/constants.dart';
+import '../../../widgets/common/app_image.dart';
 import '../../../widgets/common/empty_view.dart';
 import '../../../widgets/common/error_view.dart';
 import '../../../widgets/common/loading_view.dart';
@@ -90,7 +91,7 @@ class _ExperienceModeScreenState extends ConsumerState<ExperienceModeScreen> {
                     if (event.imageUrls.isNotEmpty)
                       ClipRRect(
                         borderRadius: BorderRadius.circular(12),
-                        child: Image.network(event.imageUrls.first, height: 200, fit: BoxFit.cover, width: double.infinity),
+                        child: AppImage(url: event.imageUrls.first, height: 200, fit: BoxFit.cover, width: double.infinity),
                       ),
                     const SizedBox(height: 16),
                     Text(event.body, style: const TextStyle(fontSize: 16, height: 1.6)),
@@ -126,7 +127,7 @@ class _ExperienceModeScreenState extends ConsumerState<ExperienceModeScreen> {
           );
         },
         loading: () => const LoadingView(),
-        error: (e, st) => ErrorView(error: e),
+        error: (e, st) => ErrorView(error: e, onRetry: () => ref.invalidate(userLifeEventsProvider(widget.uid))),
       ),
     );
   }

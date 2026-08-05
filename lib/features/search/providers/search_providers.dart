@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/firebase_providers.dart';
 import '../../../models/life_event.dart';
+import '../../moderation/providers/moderation_providers.dart';
 
 enum SearchFilterType { category, emotionTag }
 
@@ -59,17 +60,16 @@ final searchQueryProvider =
 final searchResultsProvider = StreamProvider<List<LifeEvent>>((ref) {
   final query = ref.watch(searchQueryProvider);
   final service = ref.watch(firestoreServiceProvider);
+  final blockedIds = ref.watch(blockedUserIdsProvider).asData?.value ?? const [];
   final stream = query.filterType == SearchFilterType.category
       ? service.watchByCategory(query.value)
       : service.watchByEmotionTag(query.value);
-  if (query.keyword.trim().isEmpty) return stream;
   final keyword = query.keyword.trim();
   return stream.map(
-    (events) => events
-        .where(
-          (e) =>
-              e.title.contains(keyword) || e.body.contains(keyword),
-        )
-        .toList(),
+    (events) => events.where((e) {
+      if (blockedIds.contains(e.authorId)) return false;
+      if (keyword.isEmpty) return true;
+      return e.title.contains(keyword) || e.body.contains(keyword);
+    }).toList(),
   );
 });

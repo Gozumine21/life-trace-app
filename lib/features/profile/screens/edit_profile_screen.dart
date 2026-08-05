@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/providers/firebase_providers.dart';
 import '../../../core/utils/constants.dart';
+import '../../../widgets/common/app_image.dart';
 import '../../../widgets/common/loading_view.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../providers/profile_providers.dart';
@@ -64,7 +65,15 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
         'updatedAt': DateTime.now().millisecondsSinceEpoch,
       };
       if (_newIcon != null) {
-        data['iconUrl'] = await ref.read(storageServiceProvider).uploadUserIcon(user.uid, _newIcon!);
+        try {
+          data['iconUrl'] = await ref.read(storageServiceProvider).uploadUserIcon(user.uid, _newIcon!);
+        } catch (e) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('画像のアップロードに失敗しました: $e')),
+            );
+          }
+        }
       }
       await ref.read(firestoreServiceProvider).updateUserProfile(user.uid, data);
       if (mounted) context.pop();
@@ -97,8 +106,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     CircleAvatar(
                       radius: 48,
                       backgroundImage: _newIcon != null
-                          ? FileImage(_newIcon!)
-                          : (profile?.iconUrl != null ? NetworkImage(profile!.iconUrl!) : null) as ImageProvider?,
+                          ? FileImage(_newIcon!) as ImageProvider
+                          : (profile?.iconUrl != null ? AppImage(url: profile!.iconUrl!).toImageProvider() : null),
                       child: (_newIcon == null && profile?.iconUrl == null)
                           ? const Icon(Icons.person, size: 48)
                           : null,
@@ -128,7 +137,17 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               const SizedBox(height: 16),
               TextField(
                 controller: _birthController,
-                decoration: const InputDecoration(labelText: '生年月 (例: 1990-04)'),
+                decoration: InputDecoration(
+                  labelText: '生年月 (例: 1990-04)',
+                  suffixIcon: _birthController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () => setState(() => _birthController.clear()),
+                        )
+                      : null,
+                ),
+                keyboardType: TextInputType.datetime,
+                onChanged: (_) => setState(() {}),
               ),
               const SizedBox(height: 16),
               const Text('デフォルトの公開範囲', style: TextStyle(fontWeight: FontWeight.bold)),

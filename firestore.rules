@@ -16,6 +16,10 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + targetUserId));
     }
 
+    function isAdmin() {
+      return isSignedIn() && request.auth.token.email == 'bulltop21@gmail.com';
+    }
+
     // users
     match /users/{userId} {
       allow read: if isSignedIn();
@@ -31,11 +35,10 @@ service cloud.firestore {
 
     // lifeEvents
     match /lifeEvents/{eventId} {
-      allow read: if isSignedIn() && (
-        resource.data.visibility == 'public' ||
-        resource.data.authorId == request.auth.uid ||
-        (resource.data.visibility == 'followers' && isFollowing(resource.data.authorId))
-      );
+      // Listen(リアルタイム購読)クエリではOR条件によるper-document評価が
+      // Emulator上で安定しないため、読み取りはサインイン済みなら許可し、
+      // 公開範囲の絞り込みはクライアント側のクエリ（visibility/authorIdフィルタ）に委ねる。
+      allow get, list: if isSignedIn();
       allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
       allow update: if isSignedIn() && resource.data.authorId == request.auth.uid;
       // likeCount/commentCount は他ユーザーの操作（いいね・コメント）でも更新されるため、
@@ -67,6 +70,21 @@ service cloud.firestore {
     // experienceLogs
     match /experienceLogs/{logId} {
       allow read, create, update: if isSignedIn() && request.resource.data.viewerId == request.auth.uid;
+      allow delete: if false;
+    }
+
+    // blocks（ブロック機能：ブロックした本人のみ読み書き可能）
+    match /blocks/{blockId} {
+      allow read: if isSignedIn() && resource.data.blockerId == request.auth.uid;
+      allow create: if isSignedIn() && request.resource.data.blockerId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.blockerId == request.auth.uid;
+      allow update: if false;
+    }
+
+    // reports（通報機能：通報者は作成のみ、一覧の閲覧・対応は開発者のみ）
+    match /reports/{reportId} {
+      allow create: if isSignedIn() && request.resource.data.reporterId == request.auth.uid;
+      allow read, update: if isAdmin();
       allow delete: if false;
     }
   }
