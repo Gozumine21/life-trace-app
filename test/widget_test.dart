@@ -35,14 +35,15 @@ void main() {
 
     testWidgets('「次へ」で最後まで進み「はじめる」で完了が保存される', (tester) async {
       await pumpOnboarding(tester);
-      expect(find.text('LifeTraceへようこそ'), findsOneWidget);
+      expect(find.text('人生は、誰かのヒントになる'), findsOneWidget);
       expect(container.read(onboardingCompletedProvider), isFalse);
 
-      for (var i = 0; i < 3; i++) {
+      for (var i = 0; i < 4; i++) {
         await tester.tap(find.text('次へ'));
         await tester.pumpAndSettle();
       }
-      expect(find.text('誰かの人生を追体験する'), findsOneWidget);
+      expect(find.text('ほかの人の人生を追体験する'), findsOneWidget);
+      expect(find.text('詳しい使い方を読む'), findsOneWidget);
 
       await tester.tap(find.text('はじめる'));
       await tester.pumpAndSettle();

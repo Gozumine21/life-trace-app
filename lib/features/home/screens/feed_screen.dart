@@ -29,7 +29,7 @@ class FeedScreen extends ConsumerWidget {
           IconButton(
             icon: const Icon(Icons.help_outline),
             tooltip: '使い方ガイド',
-            onPressed: () => context.push('/guide'),
+            onPressed: () => context.push('/how-to-use'),
           ),
         ],
       ),
@@ -126,7 +126,7 @@ class _GettingStartedCard extends StatelessWidget {
                   label: const Text('最初の記録をする'),
                 ),
                 TextButton(
-                  onPressed: () => context.push('/guide'),
+                  onPressed: () => context.push('/how-to-use'),
                   child: const Text('使い方を見る'),
                 ),
               ],

@@ -153,7 +153,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 child: const Text('無料でアカウントを作成'),
               ),
               TextButton.icon(
-                onPressed: () => context.push('/guide'),
+                onPressed: () => context.push('/how-to-use'),
                 icon: const Icon(Icons.help_outline),
                 label: const Text('LifeTraceの使い方を見る'),
               ),

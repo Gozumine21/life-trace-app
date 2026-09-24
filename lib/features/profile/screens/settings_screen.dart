@@ -20,9 +20,16 @@ class SettingsScreen extends ConsumerWidget {
         children: [
           const _SectionTitle('ヘルプ'),
           ListTile(
-            leading: const Icon(Icons.help_outline),
-            title: const Text('使い方ガイド'),
-            subtitle: const Text('アプリの使い方をもう一度見る'),
+            leading: const Icon(Icons.menu_book_outlined),
+            title: const Text('LifeTraceの使い方'),
+            subtitle: const Text('人生経験の記録・共有・追体験のしかた'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/how-to-use'),
+          ),
+          ListTile(
+            leading: const Icon(Icons.slideshow_outlined),
+            title: const Text('はじめのガイド'),
+            subtitle: const Text('初回に表示された紹介をもう一度見る'),
             trailing: const Icon(Icons.chevron_right),
             onTap: () => context.push('/guide'),
           ),

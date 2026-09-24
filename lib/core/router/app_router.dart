@@ -14,6 +14,7 @@ import '../../features/life_event_form/screens/life_event_form_screen.dart';
 import '../../features/moderation/screens/report_management_screen.dart';
 import '../../features/notifications/screens/notifications_screen.dart';
 import '../../features/onboarding/providers/onboarding_providers.dart';
+import '../../features/onboarding/screens/how_to_use_screen.dart';
 import '../../features/onboarding/screens/onboarding_screen.dart';
 import '../../features/profile/screens/edit_profile_screen.dart';
 import '../../features/profile/screens/settings_screen.dart';
@@ -31,16 +32,16 @@ final routerProvider = Provider<GoRouter>((ref) {
     redirect: (context, state) {
       final isLoggedIn = authState.asData?.value != null;
       final isAuthRoute = state.matchedLocation == '/login' || state.matchedLocation == '/signup';
-
       final isOnboardingRoute = state.matchedLocation == '/onboarding';
-      // 使い方ガイドはログイン前でも開けるようにする。
-      final isPublicRoute = isAuthRoute || state.matchedLocation == '/guide';
+      // 使い方の説明は、ログイン前やはじめのガイドの途中でも開けるようにする。
+      final isGuideRoute =
+          state.matchedLocation == '/guide' || state.matchedLocation == '/how-to-use';
 
       if (authState.isLoading) return null;
       // 初回起動時は、まずアプリの使い方を紹介する。
-      if (!onboardingCompleted) return isOnboardingRoute ? null : '/onboarding';
+      if (!onboardingCompleted) return (isOnboardingRoute || isGuideRoute) ? null : '/onboarding';
       if (isOnboardingRoute) return isLoggedIn ? '/' : '/login';
-      if (!isLoggedIn && !isPublicRoute) return '/login';
+      if (!isLoggedIn && !isAuthRoute && !isGuideRoute) return '/login';
       if (isLoggedIn && isAuthRoute) return '/';
       return null;
     },
@@ -50,6 +51,7 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: '/guide',
         builder: (context, state) => const OnboardingScreen(isReplay: true),
       ),
+      GoRoute(path: '/how-to-use', builder: (context, state) => const HowToUseScreen()),
       GoRoute(
         path: '/',
         builder: (context, state) {

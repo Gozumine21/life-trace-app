@@ -15,23 +15,28 @@ class _GuidePage {
 const _pages = [
   _GuidePage(
     '📖',
-    'LifeTraceへようこそ',
-    'あなたの人生の出来事を「ライフイベント」として記録し、あとから振り返れるアプリです。',
+    '人生は、誰かのヒントになる',
+    'LifeTraceは、あなたの人生経験を記録し、\nほかの人の人生経験と分かち合うアプリです。',
   ),
   _GuidePage(
     '✍️',
-    '出来事を記録する',
-    '画面下の「記録する」ボタンから、\nいつ・何があって・どう感じたかを残せます。\n公開範囲を「非公開」にすれば、自分だけの日記になります。',
+    '自分の人生を記録する',
+    '画面下の「記録する」ボタンから、\nいつ・何があって・どう感じたかを残します。\n入学や就職など、人生の節目から書くと始めやすいです。',
   ),
   _GuidePage(
     '📈',
     '感情グラフで振り返る',
-    '記録した気持ちが「人生の浮き沈みグラフ」になります。\n転機になった出来事もひと目で分かります。',
+    '記録した気持ちが「人生の浮き沈みグラフ」になります。\nつらい時期をどう乗り越えたかが見えてきます。',
+  ),
+  _GuidePage(
+    '🌱',
+    '経験を分かち合う',
+    'あなたの経験は、同じ場面にいる誰かの支えになります。\n公開範囲は「全体」「フォロワー」「自分だけ」から選べます。',
   ),
   _GuidePage(
     '🤝',
-    '誰かの人生を追体験する',
-    'ほかの人のライフラインを読んで、\n「いいね」「わかる」「感動した」で気持ちを伝えましょう。',
+    'ほかの人の人生を追体験する',
+    'ほかの人のライフラインを読んで、\n自分では経験できなかった人生にふれましょう。\n「わかる」「感動した」で気持ちを伝えられます。',
   ),
 ];
 
@@ -156,8 +161,19 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
                   ),
               ],
             ),
+            // 最後のページでは、より詳しい説明への入口を示す。
+            Visibility(
+              visible: _isLastPage,
+              maintainSize: true,
+              maintainAnimation: true,
+              maintainState: true,
+              child: TextButton(
+                onPressed: () => context.push('/how-to-use'),
+                child: const Text('詳しい使い方を読む'),
+              ),
+            ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+              padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
               child: SizedBox(
                 width: double.infinity,
                 child: FilledButton(
