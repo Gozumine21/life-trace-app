@@ -7,6 +7,7 @@ import '../../../core/utils/constants.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../auth/screens/terms_screen.dart';
 import '../../moderation/providers/moderation_providers.dart';
+import '../../notifications/providers/push_providers.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -14,10 +15,33 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final isAdmin = ref.watch(isAdminProvider);
+    final pushEnabled = ref.watch(pushEnabledProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('設定')),
       body: ListView(
         children: [
+          const _SectionTitle('通知'),
+          SwitchListTile(
+            secondary: const Icon(Icons.notifications_active_outlined),
+            title: const Text('プッシュ通知'),
+            subtitle: const Text('気持ち・コメント・フォロー・応答記録が届いたときに知らせます'),
+            value: pushEnabled,
+            onChanged: (value) async {
+              final messenger = ScaffoldMessenger.of(context);
+              try {
+                final ok = await ref.read(pushEnabledProvider.notifier).setEnabled(value);
+                if (!ok) {
+                  messenger.showSnackBar(
+                    const SnackBar(content: Text('通知が許可されていません。iPhoneの「設定」→「LifeTrace」→「通知」から許可してください。')),
+                  );
+                }
+              } catch (_) {
+                messenger.showSnackBar(
+                  const SnackBar(content: Text('設定を変更できませんでした。通信環境を確認して、もう一度お試しください。')),
+                );
+              }
+            },
+          ),
           const _SectionTitle('ヘルプ'),
           ListTile(
             leading: const Icon(Icons.menu_book_outlined),

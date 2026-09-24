@@ -8,9 +8,20 @@ import '../../../models/reaction.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../profile/providers/profile_providers.dart';
 
+/// ある人のタイムライン。本人ならすべて、他の人なら読める公開範囲の記録だけを取得する。
 final userLifeEventsProvider =
     StreamProvider.family<List<LifeEvent>, String>((ref, authorId) {
-  return ref.watch(firestoreServiceProvider).watchUserLifeEvents(authorId);
+  final service = ref.watch(firestoreServiceProvider);
+  final viewerId = ref.watch(currentUserProvider)?.uid;
+  if (viewerId == authorId) return service.watchUserLifeEvents(authorId);
+  final follows = ref.watch(isFollowingProvider(authorId)).valueOrNull ?? false;
+  return service.watchUserLifeEvents(
+    authorId,
+    visibilities: [
+      VisibilityOption.public,
+      if (follows) VisibilityOption.followers,
+    ],
+  );
 });
 
 /// 閲覧者に見せてよいライフイベントだけに絞った、ある人のタイムライン。

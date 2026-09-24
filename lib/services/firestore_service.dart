@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../core/utils/stream_retry.dart';
@@ -74,22 +76,46 @@ class FirestoreService {
     return _lifeEvents.doc(eventId).delete();
   }
 
+  /// 1件のライフイベント。存在しないか、公開範囲の外で読めないときは null。
   Stream<LifeEvent?> watchLifeEvent(String eventId) {
-    return _lifeEvents.doc(eventId).snapshots().map((snap) {
-      if (!snap.exists) return null;
-      return LifeEvent.fromMap(snap.id, snap.data()!);
-    });
+    return _lifeEvents
+        .doc(eventId)
+        .snapshots()
+        .map<LifeEvent?>((snap) {
+          if (!snap.exists) return null;
+          return LifeEvent.fromMap(snap.id, snap.data()!);
+        })
+        .transform(
+          StreamTransformer.fromHandlers(
+            handleError: (error, stackTrace, sink) {
+              if (error is FirebaseException && error.code == 'permission-denied') {
+                sink.add(null);
+              } else {
+                sink.addError(error, stackTrace);
+              }
+            },
+          ),
+        );
   }
 
   /// 1人のライフイベントを発生年月の昇順で取得（タイムライン・グラフ用）。
-  Stream<List<LifeEvent>> watchUserLifeEvents(String authorId) {
-    return withPermissionRetry(() => _lifeEvents
-        .where('authorId', isEqualTo: authorId)
-        .orderBy('occurredYearMonth')
-        .snapshots()
-        .map(
-          (snap) =>
-              snap.docs.map((d) => LifeEvent.fromMap(d.id, d.data())).toList(),
+  ///
+  /// 他の人の記録を読むときは、Security Rules を満たすよう [visibilities] で
+  /// 公開範囲を絞り込む（本人なら null）。複合インデックスを使わないよう、並べ替えは手元で行う。
+  Stream<List<LifeEvent>> watchUserLifeEvents(
+    String authorId, {
+    List<String>? visibilities,
+  }) {
+    Query<Map<String, dynamic>> query = _lifeEvents.where('authorId', isEqualTo: authorId);
+    if (visibilities != null) {
+      query = query.where('visibility', whereIn: visibilities);
+    }
+    return withPermissionRetry(() => query.snapshots().map(
+          (snap) => snap.docs.map((d) => LifeEvent.fromMap(d.id, d.data())).toList()
+            ..sort((a, b) {
+              final byMonth = a.occurredYearMonth.compareTo(b.occurredYearMonth);
+              return byMonth != 0 ? byMonth : a.createdAt.compareTo(b.createdAt);
+            }),
         ));
   }
 
@@ -136,6 +162,7 @@ class FirestoreService {
   Stream<List<LifeEvent>> watchResponses(String eventId) {
     return _lifeEvents
         .where('respondsToEventId', isEqualTo: eventId)
+        .where('visibility', isEqualTo: 'public')
         .snapshots()
         .map(
           (snap) =>
@@ -328,6 +355,7 @@ class FirestoreService {
     await _deleteAll(_blocks.where('blockerId', isEqualTo: uid));
     await _deleteAll(_experienceLogs.where('viewerId', isEqualTo: uid));
     await _deleteAll(_notifications(uid));
+    await _deleteAll(_fcmTokens(uid));
     await _users.doc(uid).delete();
   }
 
@@ -341,6 +369,22 @@ class FirestoreService {
       }
       await batch.commit();
     }
+  }
+
+  // ---------------- fcmTokens (サブコレクション) ----------------
+
+  CollectionReference<Map<String, dynamic>> _fcmTokens(String uid) =>
+      _users.doc(uid).collection('fcmTokens');
+
+  Future<void> saveFcmToken(String uid, String token) {
+    return _fcmTokens(uid).doc(token).set({
+      'token': token,
+      'updatedAt': DateTime.now().millisecondsSinceEpoch,
+    });
+  }
+
+  Future<void> deleteFcmToken(String uid, String token) {
+    return _fcmTokens(uid).doc(token).delete();
   }
 
   // ---------------- experienceLogs ----------------

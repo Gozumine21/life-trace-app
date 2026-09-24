@@ -107,6 +107,15 @@ Cloud FirestoreはNoSQLドキュメント指向DBのため、本書では「コ�
 | isRead | boolean | 既読フラグ |
 | createdAt | timestamp | 通知発生日時 |
 
+### 2.6.1 fcmTokens（v1.2.0〜）
+
+パス: `/users/{userId}/fcmTokens/{token}`（サブコレクション、ドキュメントID=FCMトークン）。本人のみ読み書きでき、Cloud Functions がプッシュ通知の送信先として読む。
+
+| フィールド名 | 型 | 説明 |
+|---|---|---|
+| token | string | FCM 登録トークン |
+| updatedAt | timestamp | 最終登録日時 |
+
 ### 2.7 experienceLogs
 
 パス: `/experienceLogs/{logId}`

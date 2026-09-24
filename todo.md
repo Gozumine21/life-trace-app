@@ -68,10 +68,13 @@
 - [x] リアクション3種を詳細画面でも選択可能に、コメントに投稿者名
 - [x] いいね・コメント・フォロー・応答記録のお知らせをクライアントから作成
 - [x] Security Rules 修正（フォロワー数更新、experienceLogs の読み取り、投稿者によるコメント削除、プロフィール削除）
-- [ ] `firebase deploy --only firestore:rules` で本番にルールを反映
-- [ ] 実機での確認（応答記録、アカウント削除、年代検索）
-- [ ] プッシュ通知（Cloud Functions + FCM）。お知らせの作成もサーバー側へ移すと改ざん耐性が上がる
-- [ ] lifeEvents の読み取りをルール側でも公開範囲に応じて制限する（現在はクライアント側で絞り込み）
+- [x] lifeEvents・コメント・リアクションの読み取りをルール側でも公開範囲に応じて制限
+- [x] プッシュ通知のアプリ側（設定・トークン登録・iOS権限）と Cloud Functions（functions/）
+- [x] 1.2.0 (8) を App Store Connect にアップロード
+- [ ] `firebase deploy --only firestore:rules` で本番にルールを反映（審査提出の前に）
+- [ ] App Store Connect で審査に提出（docs/release/v1.2.0_審査提出.md）
+- [ ] プッシュ通知の本番化：Blaze プラン、APNs キーの登録、`firebase deploy --only functions`
+- [ ] 実機での確認（応答記録、アカウント削除、年代検索、プッシュ通知）
 
 ## 次にやるべきこと（直近）
 1. Firebaseプロジェクトをユーザー自身がFirebase Consoleで作成

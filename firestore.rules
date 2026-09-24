@@ -16,6 +16,20 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + targetUserId));
     }
 
+    // ライフイベントの公開範囲に応じた読み取り可否。
+    // 一覧クエリはこの条件を満たすように visibility / authorId で絞り込む必要がある。
+    function canReadEvent(data) {
+      return isSignedIn() && (
+        data.visibility == 'public' ||
+        data.authorId == request.auth.uid ||
+        (data.visibility == 'followers' && isFollowing(data.authorId))
+      );
+    }
+
+    function canReadEventById(eventId) {
+      return canReadEvent(get(/databases/$(database)/documents/lifeEvents/$(eventId)).data);
+    }
+
     function isEventAuthor(eventId) {
       return isSignedIn() &&
         get(/databases/$(database)/documents/lifeEvents/$(eventId)).data.authorId == request.auth.uid;
@@ -37,17 +51,25 @@ service cloud.firestore {
 
       match /notifications/{notificationId} {
         allow read, update: if isOwner(userId);
-        allow create: if isSignedIn();
+        // お知らせは、操作した本人の名前でのみ、未読として作成できる。
+        allow create: if isSignedIn() &&
+          request.resource.data.fromUserId == request.auth.uid &&
+          request.resource.data.isRead == false &&
+          request.resource.data.type in ['like', 'comment', 'follow', 'newEvent', 'response'];
         allow delete: if isOwner(userId);
+      }
+
+      // プッシュ通知の送信先（本人とサーバーのみ）。
+      match /fcmTokens/{token} {
+        allow read, write: if isOwner(userId);
       }
     }
 
     // lifeEvents
     match /lifeEvents/{eventId} {
-      // Listen(リアルタイム購読)クエリではOR条件によるper-document評価が
-      // Emulator上で安定しないため、読み取りはサインイン済みなら許可し、
-      // 公開範囲の絞り込みはクライアント側のクエリ（visibility/authorIdフィルタ）に委ねる。
-      allow get, list: if isSignedIn();
+      // 公開範囲に応じて読み取りを制限する。クライアントの一覧クエリは
+      // 「visibility == public」「authorId == 自分」「authorId == 相手 かつ visibility in [...]」のいずれか。
+      allow read: if canReadEvent(resource.data);
       allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
       allow update: if isSignedIn() && resource.data.authorId == request.auth.uid;
       // likeCount/commentCount は他ユーザーの操作（いいね・コメント）でも更新されるため、
@@ -57,15 +79,15 @@ service cloud.firestore {
       allow delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
 
       match /comments/{commentId} {
-        allow read: if isSignedIn();
-        allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+        allow read: if canReadEventById(eventId);
+        allow create: if canReadEventById(eventId) && request.resource.data.authorId == request.auth.uid;
         allow update, delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
         // 記録の投稿者は、記録を削除するときに届いたコメントもまとめて削除できる。
         allow delete: if isEventAuthor(eventId);
       }
 
       match /reactions/{userId} {
-        allow read: if isSignedIn();
+        allow read: if canReadEventById(eventId);
         allow create, update, delete: if isOwner(userId);
         allow delete: if isEventAuthor(eventId);
       }

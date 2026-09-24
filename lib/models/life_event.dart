@@ -85,8 +85,7 @@ class LifeEvent {
 
   /// 閲覧者にこの記録を見せてよいか。
   ///
-  /// Firestore のルールでは一覧の読み取りを広く許可しているため、
-  /// 他人のタイムラインを表示するときは必ずこれで絞り込む。
+  /// Security Rules でも同じ条件で読み取りを制限している。画面側でも念のため絞り込む。
   bool isVisibleTo(String? viewerId, {required bool viewerFollowsAuthor}) {
     if (viewerId != null && viewerId == authorId) return true;
     switch (visibility) {
