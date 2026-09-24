@@ -6,15 +6,20 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/providers/firebase_providers.dart';
 import '../../../core/utils/constants.dart';
+import '../../../core/utils/privacy_check.dart';
 import '../../../models/life_event.dart';
 import '../../../widgets/common/app_image.dart';
 import '../../auth/providers/auth_providers.dart';
+import '../../profile/providers/profile_providers.dart';
 import '../../timeline/providers/life_event_providers.dart';
 
 class LifeEventFormScreen extends ConsumerStatefulWidget {
   final String? eventId;
 
-  const LifeEventFormScreen({super.key, this.eventId});
+  /// 他の人の記録に「応えて」書くときの、元の記録のID。
+  final String? respondsToEventId;
+
+  const LifeEventFormScreen({super.key, this.eventId, this.respondsToEventId});
 
   bool get isEditing => eventId != null;
 
@@ -35,10 +40,12 @@ class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
   String _category = LifeEventCategories.all.first;
   String _emotionLabel = '普通';
   bool _isTurningPoint = false;
-  String _visibility = VisibilityOption.public;
+  // 書いてから公開を判断できるよう、プロフィールの設定がなければ非公開から始める。
+  String _visibility = VisibilityOption.private;
   final List<File> _newImages = [];
   List<String> _existingImageUrls = [];
   bool _loadedInitialValues = false;
+  bool _appliedDefaults = false;
   bool _isSaving = false;
 
   /// 入力内容が変わったか。戻るときに破棄の確認を出すために使う。
@@ -59,6 +66,67 @@ class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
     _visibility = event.visibility.name;
     _existingImageUrls = List<String>.from(event.imageUrls);
     _loadedInitialValues = true;
+  }
+
+  /// 新規作成時に、プロフィールの公開範囲と、応える元の記録のジャンルを初期値にする。
+  void _applyDefaults() {
+    if (widget.isEditing || _appliedDefaults || _isDirty) return;
+    final profile = ref.read(currentUserProfileProvider).valueOrNull;
+    final original = widget.respondsToEventId == null
+        ? null
+        : ref.read(lifeEventProvider(widget.respondsToEventId!)).valueOrNull;
+    final waitingForOriginal = widget.respondsToEventId != null && original == null;
+    if (profile == null && waitingForOriginal) return;
+    if (profile != null && VisibilityOption.all.contains(profile.defaultVisibility)) {
+      _visibility = profile.defaultVisibility;
+    }
+    if (original != null && LifeEventCategories.all.contains(original.category)) {
+      _category = original.category;
+    }
+    _appliedDefaults = profile != null && !waitingForOriginal;
+  }
+
+  /// 本文に「5つの問い」を差し込む。書きかけの本文があれば末尾に足す。
+  void _insertTemplate() {
+    final current = _bodyController.text.trimRight();
+    final text = current.isEmpty ? WritingGuide.bodyTemplate : '$current\n\n${WritingGuide.bodyTemplate}';
+    _bodyController.value = TextEditingValue(
+      text: text,
+      selection: TextSelection.collapsed(offset: text.length),
+    );
+    _update(() {});
+  }
+
+  /// 公開する記録に個人を特定できそうな情報があれば、保存前に確認する。
+  Future<bool> _confirmPrivacy() async {
+    if (_visibility == VisibilityOption.private) return true;
+    final concerns = PrivacyCheck.findConcerns(
+      '${_titleController.text}\n${_bodyController.text}',
+    );
+    if (concerns.isEmpty) return true;
+    final proceed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.privacy_tip_outlined),
+        title: const Text('公開する前に確認してください'),
+        content: Text(
+          '本文に「${concerns.join('」「')}」のような情報が含まれているようです。\n\n'
+          '${VisibilityOption.labelFor(_visibility)}の記録は、ほかの人も読めます。'
+          'あなたや登場する人が特定されないか、もう一度確かめましょう。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('書き直す'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('このまま保存'),
+          ),
+        ],
+      ),
+    );
+    return proceed ?? false;
   }
 
   /// 入力値を変更し、未保存の変更ありとして記録する。
@@ -127,6 +195,7 @@ class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
     }
     final user = ref.read(currentUserProvider);
     if (user == null) return;
+    if (!await _confirmPrivacy() || !mounted) return;
 
     setState(() => _isSaving = true);
     final messenger = ScaffoldMessenger.of(context);
@@ -171,6 +240,7 @@ class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
               isTurningPoint: _isTurningPoint,
               visibility: _visibility,
               imageUrls: const [],
+              respondsToEventId: widget.respondsToEventId,
             );
         if (_newImages.isNotEmpty) {
           final uploaded = await ref
@@ -201,7 +271,21 @@ class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
     if (widget.isEditing) {
       final eventAsync = ref.watch(lifeEventProvider(widget.eventId!));
       eventAsync.whenData(_loadFromEvent);
+    } else {
+      ref.watch(currentUserProfileProvider);
+      if (widget.respondsToEventId != null) ref.watch(lifeEventProvider(widget.respondsToEventId!));
+      _applyDefaults();
     }
+    // 転機マークが多すぎると、読む人に「分かれ道」が伝わりにくくなる。
+    final uid = ref.watch(currentUserProvider)?.uid;
+    final myEvents = uid == null
+        ? const <LifeEvent>[]
+        : ref.watch(userLifeEventsProvider(uid)).valueOrNull ?? const <LifeEvent>[];
+    final turningPointCount = myEvents.where((e) => e.isTurningPoint && e.eventId != widget.eventId).length;
+    final turningPointsCrowded = _isTurningPoint &&
+        myEvents.length >= 5 &&
+        (turningPointCount + 1) / (myEvents.length + (widget.isEditing ? 0 : 1)) >
+            WritingGuide.turningPointRatioGuide * 2;
     final colorScheme = Theme.of(context).colorScheme;
 
     return PopScope(
@@ -226,10 +310,12 @@ class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
             children: [
+              if (widget.respondsToEventId != null)
+                _RespondingBanner(eventId: widget.respondsToEventId!),
               const _SectionHeader(
                 step: '1',
                 title: 'いつの出来事？',
-                help: 'おおよその年月で大丈夫です',
+                help: 'おおよその年月で大丈夫です。長く続いたことは、始まった月か気持ちが大きく動いた月を',
               ),
               InkWell(
                 onTap: _pickYearMonth,
@@ -246,7 +332,7 @@ class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
               const _SectionHeader(
                 step: '2',
                 title: '何があった？',
-                help: 'タイトルは一言で。本文には当時の様子を自由に書きましょう',
+                help: 'タイトルは「出来事＋変化」で書くと伝わりやすくなります',
               ),
               TextFormField(
                 controller: _titleController,
@@ -254,7 +340,7 @@ class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
                 textInputAction: TextInputAction.next,
                 decoration: const InputDecoration(
                   labelText: 'タイトル',
-                  hintText: '例: 第一志望の大学に合格した',
+                  hintText: '例: 10年勤めた会社を辞めて、未経験の業界へ',
                 ),
                 onChanged: (_) => _update(() {}),
                 validator: (v) => (v == null || v.trim().isEmpty) ? 'タイトルを入力してください' : null,
@@ -272,10 +358,18 @@ class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
                 onChanged: (_) => _update(() {}),
                 validator: (v) => (v == null || v.trim().isEmpty) ? '本文を入力してください' : null,
               ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton.icon(
+                  onPressed: _insertTemplate,
+                  icon: const Icon(Icons.lightbulb_outline),
+                  label: const Text('書き方のヒント（5つの問い）を入れる'),
+                ),
+              ),
               const _SectionHeader(
                 step: '3',
                 title: 'どんな気持ちだった？',
-                help: '選んだ気持ちが「感情グラフ」の高さになります',
+                help: '今ではなく、その出来事のときの気持ちを。選んだ気持ちが「感情グラフ」の高さになります',
               ),
               Wrap(
                 spacing: 8,
@@ -283,6 +377,7 @@ class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
                 children: EmotionTag.all.map((tag) {
                   return ChoiceChip(
                     label: Text('${tag.emoji} ${tag.label}'),
+                    tooltip: 'グラフの高さ ${tag.score > 0 ? '+' : ''}${tag.score}',
                     selected: tag.label == _emotionLabel,
                     onSelected: (_) => _update(() => _emotionLabel = tag.label),
                   );
@@ -291,7 +386,7 @@ class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
               const _SectionHeader(
                 step: '4',
                 title: 'どんなジャンル？',
-                help: '検索やグラフの分類に使われます',
+                help: '同じ悩みを持つ人が「さがす」で探しそうなジャンルを選びましょう',
               ),
               Wrap(
                 spacing: 8,
@@ -304,7 +399,11 @@ class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
                   );
                 }).toList(),
               ),
-              const _SectionHeader(step: '5', title: '誰に見せる？'),
+              const _SectionHeader(
+                step: '5',
+                title: '誰に見せる？',
+                help: '迷ったら非公開で。公開範囲はあとから何度でも変えられます',
+              ),
               RadioGroup<String>(
                 groupValue: _visibility,
                 onChanged: (value) => _update(() => _visibility = value!),
@@ -321,17 +420,26 @@ class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
                       .toList(),
                 ),
               ),
+              if (_visibility == VisibilityOption.public) const _PublicChecklist(),
               const _SectionHeader(title: 'そのほか（任意）'),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
                 secondary: const Icon(Icons.bolt, color: Colors.amber),
                 title: const Text('人生の転機としてマークする'),
-                subtitle: const Text('感情グラフや一覧で目立つように表示されます'),
+                subtitle: Text(
+                  turningPointsCrowded
+                      ? '転機が多くなっています。その前と後で生き方が変わった出来事だけにすると、読む人に分かれ道が伝わります'
+                      : 'その前と後で生き方が変わった出来事に。目安は記録全体の1割ほどです',
+                ),
                 value: _isTurningPoint,
                 onChanged: (v) => _update(() => _isTurningPoint = v),
               ),
               const SizedBox(height: 8),
               Text('写真', style: Theme.of(context).textTheme.titleSmall),
+              Text(
+                '人の顔・住所・制服・名札が写っていないもの（風景や手元など）を選びましょう',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant),
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
@@ -391,6 +499,91 @@ class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// 応える元の記録を、フォームの先頭に示す。
+class _RespondingBanner extends ConsumerWidget {
+  final String eventId;
+
+  const _RespondingBanner({required this.eventId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final original = ref.watch(lifeEventProvider(eventId)).valueOrNull;
+    final colorScheme = Theme.of(context).colorScheme;
+    return Card(
+      color: colorScheme.secondaryContainer,
+      margin: const EdgeInsets.only(top: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.reply, color: colorScheme.onSecondaryContainer),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    original == null ? '読んだ記録に応えて記録します' : '「${original.title}」に応えて記録します',
+                    style: TextStyle(fontWeight: FontWeight.bold, color: colorScheme.onSecondaryContainer),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'あなたの似た出来事を、それが起きた年月で記録しましょう。'
+              '同じ出来事でも、選んだ道や感じ方の違いを書くと、読む人の選択肢が広がります。'
+              '公開すると、元の記録の下に表示され、書いた人にお知らせが届きます。',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: colorScheme.onSecondaryContainer),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 全体公開を選んだときに示す、公開前の3つの確認。
+class _PublicChecklist extends StatelessWidget {
+  const _PublicChecklist();
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('全体公開の前に確かめましょう', style: textTheme.titleSmall),
+          const SizedBox(height: 6),
+          for (final item in const [
+            '知らない人に読まれても後悔しない',
+            '登場する人が読んでも困らない書き方になっている',
+            '名前・学校名・勤務先・住所など、本人を特定できる情報がない',
+          ])
+            Padding(
+              padding: const EdgeInsets.only(bottom: 4),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.check_box_outline_blank, size: 18, color: colorScheme.primary),
+                  const SizedBox(width: 6),
+                  Expanded(child: Text(item, style: textTheme.bodySmall)),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }

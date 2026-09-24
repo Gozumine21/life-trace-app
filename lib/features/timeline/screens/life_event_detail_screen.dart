@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/utils/constants.dart';
+import '../../../core/utils/life_age.dart';
+import '../../../models/life_event.dart';
 import '../../../models/report.dart';
 import '../../../widgets/common/app_image.dart';
 import '../../../widgets/common/emotion_score_badge.dart';
@@ -13,6 +15,7 @@ import '../../moderation/widgets/report_dialog.dart';
 import '../../profile/providers/profile_providers.dart';
 import '../providers/life_event_providers.dart';
 import '../widgets/life_event_card.dart';
+import '../widgets/reaction_bar.dart';
 
 class LifeEventDetailScreen extends ConsumerStatefulWidget {
   final String eventId;
@@ -32,12 +35,14 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
     super.dispose();
   }
 
-  Future<void> _sendComment() async {
+  Future<void> _sendComment(String eventAuthorId) async {
     final text = _commentController.text.trim();
     if (text.isEmpty) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      await ref.read(lifeEventControllerProvider.notifier).addComment(widget.eventId, text);
+      await ref
+          .read(lifeEventControllerProvider.notifier)
+          .addComment(widget.eventId, text, eventAuthorId: eventAuthorId);
       _commentController.clear();
       if (mounted) FocusScope.of(context).unfocus();
     } catch (e) {
@@ -51,7 +56,6 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
   Widget build(BuildContext context) {
     final eventAsync = ref.watch(lifeEventProvider(widget.eventId));
     final commentsAsync = ref.watch(eventCommentsProvider(widget.eventId));
-    final myReactionAsync = ref.watch(myReactionProvider(widget.eventId));
     final currentUser = ref.watch(currentUserProvider);
 
     final loadedEvent = eventAsync.valueOrNull;
@@ -78,11 +82,19 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
       ),
       body: eventAsync.when(
         data: (event) {
-          if (event == null) {
-            return const Center(child: Text('このライフイベントは見つかりませんでした'));
+          final follows = event == null
+              ? false
+              : ref.watch(isFollowingProvider(event.authorId)).valueOrNull ?? false;
+          if (event == null ||
+              !event.isVisibleTo(currentUser?.uid, viewerFollowsAuthor: follows)) {
+            return const Center(child: Text('このライフイベントは見つからないか、公開されていません'));
           }
           final isOwner = currentUser?.uid == event.authorId;
           final authorAsync = ref.watch(userProfileProvider(event.authorId));
+          final ageLabel = LifeAge.label(
+            birthYearMonth: authorAsync.valueOrNull?.birthYearMonth,
+            occurredYearMonth: event.occurredYearMonth,
+          );
           return Column(
             children: [
               Expanded(
@@ -127,14 +139,27 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
                     Wrap(
                       spacing: 8,
                       children: [
-                        Chip(label: Text(event.occurredYearMonth)),
-                        Chip(label: Text(event.category)),
+                        Chip(
+                          label: Text(
+                            ageLabel == null
+                                ? event.occurredYearMonth
+                                : '${event.occurredYearMonth}（$ageLabel）',
+                          ),
+                        ),
+                        Chip(label: Text('${LifeEventCategories.emojiFor(event.category)} ${event.category}')),
+                        if (isOwner)
+                          Chip(
+                            avatar: Icon(_visibilityIcon(event.visibility), size: 16),
+                            label: Text(VisibilityOption.labelFor(event.visibility.name)),
+                          ),
                         EmotionScoreBadge(
                           emotionTag: event.emotionTag,
                           emotionScore: event.emotionScore,
                         ),
                       ],
                     ),
+                    if (event.respondsToEventId != null)
+                      _RespondsToLink(eventId: event.respondsToEventId!),
                     const SizedBox(height: 16),
                     Text(event.body, style: const TextStyle(fontSize: 16, height: 1.5)),
                     if (event.imageUrls.isNotEmpty) ...[
@@ -157,28 +182,17 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
                       ),
                     ],
                     const SizedBox(height: 16),
+                    ReactionBar(event: event),
+                    if (!isOwner && currentUser != null) ...[
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: () => context.push('/life-event/new?respondTo=${event.eventId}'),
+                        icon: const Icon(Icons.reply),
+                        label: const Text('この記録に応えて、自分の経験を記録する'),
+                      ),
+                    ],
                     Row(
                       children: [
-                        myReactionAsync.when(
-                          data: (reaction) => OutlinedButton.icon(
-                            onPressed: currentUser == null
-                                ? null
-                                : () => ref
-                                    .read(lifeEventControllerProvider.notifier)
-                                    .toggleReaction(
-                                      widget.eventId,
-                                      reaction != null,
-                                      ReactionType.like,
-                                    ),
-                            icon: Icon(
-                              reaction != null ? Icons.favorite : Icons.favorite_border,
-                              color: Colors.redAccent,
-                            ),
-                            label: Text('いいね ${event.likeCount}'),
-                          ),
-                          loading: () => const SizedBox.shrink(),
-                          error: (e, st) => const SizedBox.shrink(),
-                        ),
                         const Spacer(),
                         if (isOwner)
                           TextButton.icon(
@@ -225,7 +239,7 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
                                 } catch (e) {
                                   if (context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(content: Text('削除に失敗しました: $e')),
+                                      const SnackBar(content: Text('削除できませんでした。通信環境を確認して、もう一度お試しください。')),
                                     );
                                   }
                                 }
@@ -234,6 +248,7 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
                           ),
                       ],
                     ),
+                    _ResponsesSection(eventId: event.eventId),
                     const Divider(height: 32),
                     Text(
                       'コメント（${event.commentCount}件）',
@@ -251,11 +266,11 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
                         return Column(
                           children: comments
                               .map(
-                                (c) => ListTile(
-                                  contentPadding: EdgeInsets.zero,
-                                  leading: const CircleAvatar(child: Icon(Icons.person, size: 18)),
-                                  title: Text(c.body),
-                                  subtitle: Text(formatDateTime(c.createdAt)),
+                                (c) => _CommentTile(
+                                  authorId: c.authorId,
+                                  body: c.body,
+                                  createdAt: c.createdAt,
+                                  isEventAuthor: c.authorId == event.authorId,
                                 ),
                               )
                               .toList(),
@@ -285,8 +300,8 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
                           controller: _commentController,
                           minLines: 1,
                           maxLines: 4,
-                          decoration: const InputDecoration(
-                            hintText: '感想やはげましを送る',
+                          decoration: InputDecoration(
+                            hintText: isOwner ? '届いたコメントに返信する' : WritingGuide.commentHint,
                             isDense: true,
                           ),
                         ),
@@ -297,7 +312,8 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
                         builder: (context, value, _) => IconButton.filled(
                           icon: const Icon(Icons.send),
                           tooltip: 'コメントを送信',
-                          onPressed: value.text.trim().isEmpty ? null : _sendComment,
+                          onPressed:
+                              value.text.trim().isEmpty ? null : () => _sendComment(event.authorId),
                         ),
                       ),
                     ],
@@ -312,6 +328,103 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
           onRetry: () => ref.invalidate(lifeEventProvider(widget.eventId)),
         ),
       ),
+    );
+  }
+}
+
+IconData _visibilityIcon(EventVisibility visibility) {
+  switch (visibility) {
+    case EventVisibility.public:
+      return Icons.public;
+    case EventVisibility.followers:
+      return Icons.group_outlined;
+    case EventVisibility.private:
+      return Icons.lock_outline;
+  }
+}
+
+/// 「この記録は〇〇に応えて書かれました」の表示。
+class _RespondsToLink extends ConsumerWidget {
+  final String eventId;
+
+  const _RespondsToLink({required this.eventId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final original = ref.watch(lifeEventProvider(eventId)).valueOrNull;
+    final viewerId = ref.watch(currentUserProvider)?.uid;
+    if (original == null || !original.isVisibleTo(viewerId, viewerFollowsAuthor: false)) {
+      return const SizedBox.shrink();
+    }
+    final colorScheme = Theme.of(context).colorScheme;
+    return Card(
+      margin: const EdgeInsets.only(top: 12),
+      color: colorScheme.secondaryContainer,
+      child: ListTile(
+        leading: const Icon(Icons.reply),
+        title: Text('「${original.title}」に応えて書かれた記録です'),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () => context.push('/life-event/${original.eventId}'),
+      ),
+    );
+  }
+}
+
+/// この記録に応えて書かれた記録の一覧。
+class _ResponsesSection extends ConsumerWidget {
+  final String eventId;
+
+  const _ResponsesSection({required this.eventId});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final responses = ref.watch(responsesProvider(eventId)).valueOrNull ?? const [];
+    if (responses.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(height: 32),
+        Text(
+          'この記録に応えた経験（${responses.length}件）',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          '同じような出来事を、別の人はこう経験しました。',
+          style: Theme.of(context).textTheme.bodySmall,
+        ),
+        for (final response in responses)
+          LifeEventCard(
+            event: response,
+            onTap: () => context.push('/life-event/${response.eventId}'),
+          ),
+      ],
+    );
+  }
+}
+
+class _CommentTile extends ConsumerWidget {
+  final String authorId;
+  final String body;
+  final DateTime createdAt;
+  final bool isEventAuthor;
+
+  const _CommentTile({
+    required this.authorId,
+    required this.body,
+    required this.createdAt,
+    required this.isEventAuthor,
+  });
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final name = ref.watch(userProfileProvider(authorId)).valueOrNull?.displayName ?? 'ユーザー';
+    return ListTile(
+      contentPadding: EdgeInsets.zero,
+      leading: const CircleAvatar(child: Icon(Icons.person, size: 18)),
+      title: Text(body),
+      subtitle: Text('${isEventAuthor ? '$name（投稿者）' : name} ・ ${formatDateTime(createdAt)}'),
+      onTap: () => context.push('/user/$authorId'),
     );
   }
 }

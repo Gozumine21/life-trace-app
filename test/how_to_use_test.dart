@@ -8,7 +8,7 @@ import 'package:life_trace_app/features/onboarding/providers/onboarding_provider
 import 'package:life_trace_app/features/onboarding/screens/how_to_use_screen.dart';
 
 void main() {
-  testWidgets('使い方ページは考え方と6つの使い方を説明する', (tester) async {
+  testWidgets('使い方ページは考え方と7つの使い方を説明する', (tester) async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
     await tester.pumpWidget(
@@ -29,7 +29,8 @@ void main() {
       '3. 経験を分かち合う',
       '4. ほかの人の人生にふれる',
       '5. 気持ちを伝え合う',
-      '6. 安心して使うために',
+      '6. 経験で応える',
+      '7. 安心して使うために',
     ]) {
       await tester.scrollUntilVisible(find.text(title), 200);
       expect(find.text(title), findsOneWidget);

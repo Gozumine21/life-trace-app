@@ -14,6 +14,9 @@ class LifeEvent {
   final EventVisibility visibility;
   final int likeCount;
   final int commentCount;
+
+  /// この記録が「応えて」書かれた、元のライフイベントのID（応答記録）。
+  final String? respondsToEventId;
   final DateTime createdAt;
   final DateTime updatedAt;
 
@@ -31,6 +34,7 @@ class LifeEvent {
     required this.visibility,
     required this.likeCount,
     required this.commentCount,
+    this.respondsToEventId,
     required this.createdAt,
     required this.updatedAt,
   });
@@ -53,6 +57,7 @@ class LifeEvent {
       ),
       likeCount: map['likeCount'] as int? ?? 0,
       commentCount: map['commentCount'] as int? ?? 0,
+      respondsToEventId: map['respondsToEventId'] as String?,
       createdAt: DateTime.fromMillisecondsSinceEpoch(map['createdAt'] as int),
       updatedAt: DateTime.fromMillisecondsSinceEpoch(map['updatedAt'] as int),
     );
@@ -72,8 +77,24 @@ class LifeEvent {
       'visibility': visibility.name,
       'likeCount': likeCount,
       'commentCount': commentCount,
+      if (respondsToEventId != null) 'respondsToEventId': respondsToEventId,
       'createdAt': createdAt.millisecondsSinceEpoch,
       'updatedAt': updatedAt.millisecondsSinceEpoch,
     };
+  }
+
+  /// 閲覧者にこの記録を見せてよいか。
+  ///
+  /// Security Rules でも同じ条件で読み取りを制限している。画面側でも念のため絞り込む。
+  bool isVisibleTo(String? viewerId, {required bool viewerFollowsAuthor}) {
+    if (viewerId != null && viewerId == authorId) return true;
+    switch (visibility) {
+      case EventVisibility.public:
+        return true;
+      case EventVisibility.followers:
+        return viewerFollowsAuthor;
+      case EventVisibility.private:
+        return false;
+    }
   }
 }

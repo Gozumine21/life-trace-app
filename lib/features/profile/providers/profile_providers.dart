@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/providers/firebase_providers.dart';
+import '../../../core/utils/constants.dart';
 import '../../../models/user_profile.dart';
 import '../../auth/providers/auth_providers.dart';
 
@@ -38,6 +39,13 @@ class FollowController extends AsyncNotifier<void> {
         await service.unfollow(user.uid, targetUid);
       } else {
         await service.follow(user.uid, targetUid);
+        try {
+          await service.sendNotification(
+            toUid: targetUid,
+            fromUid: user.uid,
+            type: NotificationType.follow,
+          );
+        } catch (_) {}
       }
     });
   }

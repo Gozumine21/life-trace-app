@@ -70,6 +70,15 @@ class LifeEventCard extends ConsumerWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  if (isOwnEvent && event.visibility != EventVisibility.public)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: Icon(
+                        event.visibility == EventVisibility.private ? Icons.lock_outline : Icons.group_outlined,
+                        size: 14,
+                        semanticLabel: event.visibility == EventVisibility.private ? '非公開' : 'フォロワー限定',
+                      ),
+                    ),
                   Text(
                     event.occurredYearMonth,
                     style: Theme.of(context).textTheme.bodySmall,

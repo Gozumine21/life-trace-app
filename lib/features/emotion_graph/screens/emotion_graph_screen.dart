@@ -20,7 +20,7 @@ class EmotionGraphScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final eventsAsync = ref.watch(userLifeEventsProvider(uid));
+    final eventsAsync = ref.watch(visibleUserLifeEventsProvider(uid));
     final profileAsync = ref.watch(userProfileProvider(uid));
 
     return Scaffold(
@@ -44,6 +44,8 @@ class EmotionGraphScreen extends ConsumerWidget {
             );
           }
           final turningPoints = events.where((e) => e.isTurningPoint).toList();
+          final recoveries = findRecoveries(events);
+          final isSelf = ref.watch(currentUserProvider)?.uid == uid;
           return ListView(
             padding: const EdgeInsets.all(16),
             children: [
@@ -53,6 +55,25 @@ class EmotionGraphScreen extends ConsumerWidget {
                     '点をタップすると出来事の名前が表示されます。黄色の点は「転機」です。',
               ),
               SizedBox(height: 260, child: _EmotionLineChart(events: events)),
+              const SizedBox(height: 32),
+              _ChartHeader(
+                title: '谷からの回復',
+                help: isSelf
+                    ? 'つらい出来事のあと、気持ちが上向いた出来事です。ここにあなたの立ち直り方が表れています。'
+                        '同じ谷にいる誰かにとって、最も役に立つ経験です。'
+                    : 'つらい出来事のあと、どうやって気持ちが上向いたかをたどれます。',
+              ),
+              if (recoveries.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.symmetric(vertical: 8),
+                  child: Text('まだ「谷」から「山」への流れは見つかっていません。'),
+                ),
+              for (final (valley, peak) in recoveries)
+                _RecoveryTile(
+                  valley: valley,
+                  peak: peak,
+                  showShareHint: isSelf && peak.visibility == EventVisibility.private,
+                ),
               const SizedBox(height: 32),
               const _ChartHeader(
                 title: 'ジャンル別の割合',
@@ -84,6 +105,74 @@ class EmotionGraphScreen extends ConsumerWidget {
         },
         loading: () => const LoadingView(),
         error: (e, st) => ErrorView(error: e, onRetry: () => ref.invalidate(userLifeEventsProvider(uid))),
+      ),
+    );
+  }
+}
+
+/// 「谷」（気持ちが -3 以下）の出来事と、そのあと最初に気持ちが上向いた（+2 以上）出来事の組。
+List<(LifeEvent, LifeEvent)> findRecoveries(List<LifeEvent> events) {
+  final result = <(LifeEvent, LifeEvent)>[];
+  for (var i = 0; i < events.length; i++) {
+    if (events[i].emotionScore > -3) continue;
+    // 谷が続く場合は、最後の谷から数える。
+    if (i + 1 < events.length && events[i + 1].emotionScore <= -3) continue;
+    for (var j = i + 1; j < events.length; j++) {
+      if (events[j].emotionScore >= 2) {
+        result.add((events[i], events[j]));
+        break;
+      }
+    }
+  }
+  return result;
+}
+
+class _RecoveryTile extends StatelessWidget {
+  final LifeEvent valley;
+  final LifeEvent peak;
+  final bool showShareHint;
+
+  const _RecoveryTile({required this.valley, required this.peak, required this.showShareHint});
+
+  @override
+  Widget build(BuildContext context) {
+    final textTheme = Theme.of(context).textTheme;
+    Widget row(LifeEvent e) => InkWell(
+          onTap: () => context.push('/life-event/${e.eventId}'),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(
+              children: [
+                Text(EmotionTag.emojiFor(e.emotionTag), style: const TextStyle(fontSize: 20)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(e.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                ),
+                Text(e.occurredYearMonth, style: textTheme.bodySmall),
+              ],
+            ),
+          ),
+        );
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            row(valley),
+            const Padding(
+              padding: EdgeInsets.only(left: 4),
+              child: Icon(Icons.south, size: 16),
+            ),
+            row(peak),
+            if (showShareHint)
+              Text(
+                '回復の記録は非公開です。気持ちが落ち着いていれば、公開を考えてみませんか？',
+                style: textTheme.bodySmall?.copyWith(color: Theme.of(context).colorScheme.primary),
+              ),
+          ],
+        ),
       ),
     );
   }

@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../notifications/providers/notifications_providers.dart';
+import '../../notifications/providers/push_providers.dart';
 
 class HomeShell extends ConsumerWidget {
   final StatefulNavigationShell navigationShell;
@@ -15,6 +16,8 @@ class HomeShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final unreadCount = ref.watch(unreadNotificationCountProvider);
+    // プッシュ通知を有効にしている端末では、起動時に送信先を登録し直す。
+    ref.watch(pushEnabledProvider);
     final showRecordButton = _tabsWithRecordButton.contains(navigationShell.currentIndex);
 
     return Scaffold(

@@ -52,6 +52,7 @@ Cloud FirestoreはNoSQLドキュメント指向DBのため、本書では「コ�
 | visibility | string | 公開範囲（"public" \| "followers" \| "private"） |
 | likeCount | number | いいね数（集計値） |
 | commentCount | number | コメント数（集計値） |
+| respondsToEventId | string \| null | 応答記録の元になったライフイベントのID（v1.2.0〜。応答記録でなければフィールドなし） |
 | createdAt | timestamp | 作成日時 |
 | updatedAt | timestamp | 更新日時 |
 
@@ -59,6 +60,8 @@ Cloud FirestoreはNoSQLドキュメント指向DBのため、本書では「コ�
 - `authorId` + `occurredYearMonth`（昇順）の複合インデックス → 個人のタイムライン取得に使用
 - `visibility` + `createdAt`（降順）の複合インデックス → ホームフィード取得に使用
 - `category`, `emotionTag` の単一フィールドインデックス → 検索機能に使用
+- `respondsToEventId` の単一フィールドインデックス（自動作成）→ 応答記録の一覧に使用
+- ジャンルと気持ちの組み合わせ・年代での検索は、1条件で問い合わせたうえでクライアント側で絞り込む（追加の複合インデックスは不要）
 
 ### 2.3 comments
 
@@ -98,11 +101,20 @@ Cloud FirestoreはNoSQLドキュメント指向DBのため、本書では「コ�
 | フィールド名 | 型 | 説明 |
 |---|---|---|
 | notificationId | string | ドキュメントID |
-| type | string | 通知種別（"like" \| "comment" \| "follow" \| "newEvent"） |
+| type | string | 通知種別（"like" \| "comment" \| "follow" \| "newEvent" \| "response"）。v1.2.0からクライアントが相手のサブコレクションに作成する |
 | fromUserId | string | 通知元ユーザーのuid |
 | targetEventId | string \| null | 対象のライフイベントID（該当する場合） |
 | isRead | boolean | 既読フラグ |
 | createdAt | timestamp | 通知発生日時 |
+
+### 2.6.1 fcmTokens（v1.2.0〜）
+
+パス: `/users/{userId}/fcmTokens/{token}`（サブコレクション、ドキュメントID=FCMトークン）。本人のみ読み書きでき、Cloud Functions がプッシュ通知の送信先として読む。
+
+| フィールド名 | 型 | 説明 |
+|---|---|---|
+| token | string | FCM 登録トークン |
+| updatedAt | timestamp | 最終登録日時 |
 
 ### 2.7 experienceLogs
 
