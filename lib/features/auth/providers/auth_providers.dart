@@ -46,7 +46,8 @@ class AuthController extends AsyncNotifier<void> {
               iconUrl: null,
               bio: '',
               birthYearMonth: null,
-              defaultVisibility: 'public',
+              // 書いてから公開を判断できるよう、最初は非公開にしておく。
+              defaultVisibility: 'private',
               followerCount: 0,
               followingCount: 0,
               createdAt: now,
@@ -61,6 +62,16 @@ class AuthController extends AsyncNotifier<void> {
     state = await AsyncValue.guard(() async {
       await ref.read(authServiceProvider).sendPasswordResetEmail(email);
     });
+  }
+
+  /// 本人確認のうえ、ライフイベントなど本人のデータをすべて消してからアカウントを削除する。
+  Future<void> deleteAccount(String password) async {
+    final auth = ref.read(authServiceProvider);
+    final uid = auth.currentUser?.uid;
+    if (uid == null) return;
+    await auth.reauthenticate(password);
+    await ref.read(firestoreServiceProvider).deleteAllUserData(uid);
+    await auth.deleteAccount();
   }
 
   Future<void> signOut() async {

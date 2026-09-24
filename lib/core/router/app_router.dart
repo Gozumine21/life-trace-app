@@ -80,7 +80,9 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/life-event/new',
-        builder: (context, state) => const LifeEventFormScreen(),
+        builder: (context, state) => LifeEventFormScreen(
+          respondsToEventId: state.uri.queryParameters['respondTo'],
+        ),
       ),
       GoRoute(
         path: '/life-event/:eventId',

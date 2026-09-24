@@ -52,7 +52,7 @@ class NotificationsScreen extends ConsumerWidget {
         data: (notifications) {
           if (notifications.isEmpty) {
             return const EmptyView(
-              message: 'お知らせはまだありません。\nあなたの投稿にいいねやコメントが届くと、ここに表示されます。',
+              message: 'お知らせはまだありません。\nあなたの記録に気持ちやコメントが届くと、ここに表示されます。\n届いたら、一言でも返信してみましょう。',
               icon: Icons.notifications_none,
             );
           }
@@ -102,6 +102,8 @@ class _NotificationTile extends ConsumerWidget {
         return 'さんがあなたをフォローしました';
       case NotificationType.newEvent:
         return 'さんが新しいライフイベントを投稿しました';
+      case NotificationType.response:
+        return 'さんがあなたの記録に応えて、自分の経験を記録しました';
       default:
         return 'さんからお知らせがあります';
     }
@@ -115,6 +117,8 @@ class _NotificationTile extends ConsumerWidget {
         return Icons.mode_comment;
       case NotificationType.follow:
         return Icons.person_add;
+      case NotificationType.response:
+        return Icons.reply;
       default:
         return Icons.notifications;
     }

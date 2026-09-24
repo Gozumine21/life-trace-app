@@ -16,6 +16,11 @@ service cloud.firestore {
         exists(/databases/$(database)/documents/follows/$(request.auth.uid + '_' + targetUserId));
     }
 
+    function isEventAuthor(eventId) {
+      return isSignedIn() &&
+        get(/databases/$(database)/documents/lifeEvents/$(eventId)).data.authorId == request.auth.uid;
+    }
+
     function isAdmin() {
       return isSignedIn() && request.auth.token.email == 'bulltop21@gmail.com';
     }
@@ -24,7 +29,11 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isSignedIn();
       allow create, update: if isOwner(userId);
-      allow delete: if false;
+      // フォロー・フォロー解除では、相手のフォロワー数だけを増減する。
+      allow update: if isSignedIn() &&
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followerCount']);
+      // アカウント削除時に、本人がプロフィールを削除する。
+      allow delete: if isOwner(userId);
 
       match /notifications/{notificationId} {
         allow read, update: if isOwner(userId);
@@ -51,11 +60,14 @@ service cloud.firestore {
         allow read: if isSignedIn();
         allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
         allow update, delete: if isSignedIn() && resource.data.authorId == request.auth.uid;
+        // 記録の投稿者は、記録を削除するときに届いたコメントもまとめて削除できる。
+        allow delete: if isEventAuthor(eventId);
       }
 
       match /reactions/{userId} {
         allow read: if isSignedIn();
         allow create, update, delete: if isOwner(userId);
+        allow delete: if isEventAuthor(eventId);
       }
     }
 
@@ -69,8 +81,11 @@ service cloud.firestore {
 
     // experienceLogs
     match /experienceLogs/{logId} {
-      allow read, create, update: if isSignedIn() && request.resource.data.viewerId == request.auth.uid;
-      allow delete: if false;
+      // 読み取り・削除は保存済みの内容（resource）で、作成・更新は書き込む内容（request.resource）で判定する。
+      // まだ存在しないドキュメントの get も、本人の履歴を作る前の確認として許可する。
+      allow read: if isSignedIn() && (resource == null || resource.data.viewerId == request.auth.uid);
+      allow create, update: if isSignedIn() && request.resource.data.viewerId == request.auth.uid;
+      allow delete: if isSignedIn() && resource.data.viewerId == request.auth.uid;
     }
 
     // blocks（ブロック機能：ブロックした本人のみ読み書き可能）

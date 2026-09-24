@@ -9,6 +9,7 @@ import '../../auth/providers/auth_providers.dart';
 import '../../moderation/providers/moderation_providers.dart';
 import '../../timeline/providers/life_event_providers.dart';
 import '../../timeline/widgets/life_event_card.dart';
+import '../providers/review_reminder_providers.dart';
 
 class FeedScreen extends ConsumerWidget {
   const FeedScreen({super.key});
@@ -21,6 +22,11 @@ class FeedScreen extends ConsumerWidget {
     // まだ1件も記録していない人には、最初の一歩を案内する。
     final hasNoOwnEvents = user != null &&
         (ref.watch(userLifeEventsProvider(user.uid)).asData?.value.isEmpty ?? false);
+    final showReview = !hasNoOwnEvents && ref.watch(reviewReminderProvider);
+    final leadingCards = [
+      if (hasNoOwnEvents) const _GettingStartedCard(),
+      if (showReview) const _ReviewReminderCard(),
+    ];
 
     return Scaffold(
       appBar: AppBar(
@@ -40,7 +46,7 @@ class FeedScreen extends ConsumerWidget {
           if (events.isEmpty) {
             return Column(
               children: [
-                if (hasNoOwnEvents) const _GettingStartedCard(),
+                ...leadingCards,
                 Expanded(
                   child: EmptyView(
                     message: 'まだ公開されているライフイベントがありません。\nあなたの物語を最初に投稿してみませんか？',
@@ -58,13 +64,10 @@ class FeedScreen extends ConsumerWidget {
             child: ListView.builder(
               // 下部の「記録する」ボタンに最後のカードが隠れないよう余白をとる。
               padding: const EdgeInsets.only(top: 8, bottom: 96),
-              itemCount: events.length + (hasNoOwnEvents ? 1 : 0),
+              itemCount: events.length + leadingCards.length,
               itemBuilder: (context, index) {
-                if (hasNoOwnEvents) {
-                  if (index == 0) return const _GettingStartedCard();
-                  index -= 1;
-                }
-                final event = events[index];
+                if (index < leadingCards.length) return leadingCards[index];
+                final event = events[index - leadingCards.length];
                 return LifeEventCard(
                   event: event,
                   onTap: () => context.push('/life-event/${event.eventId}'),
@@ -128,6 +131,71 @@ class _GettingStartedCard extends StatelessWidget {
                 TextButton(
                   onPressed: () => context.push('/how-to-use'),
                   child: const Text('使い方を見る'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// 誕生月と12月に表示する、一年のふり返りの案内。
+class _ReviewReminderCard extends ConsumerWidget {
+  const _ReviewReminderCard();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    final uid = ref.watch(currentUserProvider)?.uid;
+    final isDecember = DateTime.now().month == 12;
+    return Card(
+      margin: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+      color: colorScheme.tertiaryContainer,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 8, 12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Text('🗓️', style: TextStyle(fontSize: 20)),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isDecember ? '一年をふり返る時期です' : 'お誕生月です。一年をふり返りませんか？',
+                    style: textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.onTertiaryContainer,
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.close),
+                  tooltip: '今月は表示しない',
+                  onPressed: () => ref.read(reviewReminderProvider.notifier).dismiss(),
+                ),
+              ],
+            ),
+            Text(
+              '感情グラフで一年の山と谷を見て、非公開の記録を読み返しましょう。'
+              '時間がたって見えた「今思うこと」を本文に書き足すと、同じ時期の渦中にいる人の支えになります。',
+              style: textTheme.bodyMedium?.copyWith(color: colorScheme.onTertiaryContainer),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: [
+                FilledButton.tonalIcon(
+                  onPressed: uid == null ? null : () => context.push('/emotion-graph/$uid'),
+                  icon: const Icon(Icons.show_chart),
+                  label: const Text('感情グラフを見る'),
+                ),
+                TextButton(
+                  onPressed: () => context.go('/mypage'),
+                  child: const Text('記録を読み返す'),
                 ),
               ],
             ),

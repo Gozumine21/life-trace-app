@@ -7,6 +7,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../core/providers/firebase_providers.dart';
 import '../../../core/utils/constants.dart';
+import '../../../core/utils/life_age.dart';
 import '../../../widgets/common/app_image.dart';
 import '../../../widgets/common/loading_view.dart';
 import '../../auth/providers/auth_providers.dart';
@@ -23,7 +24,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   final _nameController = TextEditingController();
   final _bioController = TextEditingController();
   final _birthController = TextEditingController();
-  String _defaultVisibility = VisibilityOption.public;
+  String _defaultVisibility = VisibilityOption.private;
   File? _newIcon;
   bool _loaded = false;
   bool _isSaving = false;
@@ -55,6 +56,13 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
   Future<void> _save() async {
     final user = ref.read(currentUserProvider);
     if (user == null) return;
+    final birth = _birthController.text.trim();
+    if (birth.isNotEmpty && LifeAge.parseYearMonth(birth) == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('生年月は「1990-04」のように、年-月の形で入力してください')),
+      );
+      return;
+    }
     setState(() => _isSaving = true);
     try {
       final data = <String, dynamic>{
@@ -126,12 +134,21 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               const SizedBox(height: 24),
               TextField(
                 controller: _nameController,
-                decoration: const InputDecoration(labelText: '表示名'),
+                decoration: const InputDecoration(
+                  labelText: '表示名',
+                  helperText: '実名ではなくニックネームがおすすめです',
+                ),
               ),
               const SizedBox(height: 16),
               TextField(
                 controller: _bioController,
-                decoration: const InputDecoration(labelText: '自己紹介'),
+                decoration: const InputDecoration(
+                  labelText: '自己紹介',
+                  hintText: '例: IT企業で働く会社員。製造業の品質管理から転職しました。遠回りのキャリアと学び直しについて記録しています。',
+                  helperText: '今の立場・これまでの歩み・記録しているテーマを2〜3行で',
+                  helperMaxLines: 2,
+                  alignLabelWithHint: true,
+                ),
                 maxLines: 4,
               ),
               const SizedBox(height: 16),
@@ -139,6 +156,8 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 controller: _birthController,
                 decoration: InputDecoration(
                   labelText: '生年月 (例: 1990-04)',
+                  helperText: '読む人が「何歳ごろの出来事か」を想像しやすくなります。年代での検索にも使われます',
+                  helperMaxLines: 2,
                   suffixIcon: _birthController.text.isNotEmpty
                       ? IconButton(
                           icon: const Icon(Icons.clear),
@@ -151,6 +170,10 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
               ),
               const SizedBox(height: 16),
               const Text('デフォルトの公開範囲', style: TextStyle(fontWeight: FontWeight.bold)),
+              Text(
+                '新しく記録するときの初期値です。最初は「非公開」にして、書いてから公開を判断するのがおすすめです',
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
               RadioGroup<String>(
                 groupValue: _defaultVisibility,
                 onChanged: (value) => setState(() => _defaultVisibility = value!),
@@ -161,6 +184,7 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                           contentPadding: EdgeInsets.zero,
                           value: v,
                           title: Text(VisibilityOption.labelFor(v)),
+                          subtitle: Text(VisibilityOption.descriptionFor(v)),
                         ),
                       )
                       .toList(),

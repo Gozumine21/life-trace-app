@@ -1,8 +1,8 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../core/providers/firebase_providers.dart';
 import '../../../core/utils/constants.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../auth/screens/terms_screen.dart';
@@ -79,22 +79,11 @@ class SettingsScreen extends ConsumerWidget {
           ListTile(
             leading: const Icon(Icons.delete_forever, color: Colors.red),
             title: const Text('アカウントを削除', style: TextStyle(color: Colors.red)),
-            onTap: () async {
-              final confirmed = await showDialog<bool>(
-                context: context,
-                builder: (context) => AlertDialog(
-                  title: const Text('アカウントを削除しますか？'),
-                  content: const Text('この操作は取り消せません。投稿したライフイベントは残ります。'),
-                  actions: [
-                    TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('キャンセル')),
-                    TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('削除する')),
-                  ],
-                ),
-              );
-              if (confirmed == true) {
-                await ref.read(authServiceProvider).deleteAccount();
-              }
-            },
+            subtitle: const Text('記録・コメント・フォローなど、すべてのデータを削除します'),
+            onTap: () => showDialog<void>(
+              context: context,
+              builder: (context) => const _DeleteAccountDialog(),
+            ),
           ),
           const SizedBox(height: 24),
           Center(
@@ -125,6 +114,88 @@ class _SectionTitle extends StatelessWidget {
               color: Theme.of(context).colorScheme.primary,
             ),
       ),
+    );
+  }
+}
+
+/// パスワードで本人確認してから、アカウントとすべてのデータを削除するダイアログ。
+class _DeleteAccountDialog extends ConsumerStatefulWidget {
+  const _DeleteAccountDialog();
+
+  @override
+  ConsumerState<_DeleteAccountDialog> createState() => _DeleteAccountDialogState();
+}
+
+class _DeleteAccountDialogState extends ConsumerState<_DeleteAccountDialog> {
+  final _passwordController = TextEditingController();
+  bool _isDeleting = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _delete() async {
+    setState(() {
+      _isDeleting = true;
+      _error = null;
+    });
+    try {
+      await ref.read(authControllerProvider.notifier).deleteAccount(_passwordController.text);
+      if (mounted) Navigator.of(context).pop();
+    } on FirebaseAuthException catch (e) {
+      setState(() {
+        _error = switch (e.code) {
+          'wrong-password' || 'invalid-credential' => 'パスワードが違います',
+          'too-many-requests' => '試行回数が多すぎます。しばらくしてからお試しください',
+          _ => '削除できませんでした。通信環境を確認して、もう一度お試しください',
+        };
+      });
+    } catch (_) {
+      setState(() => _error = '削除できませんでした。通信環境を確認して、もう一度お試しください');
+    } finally {
+      if (mounted) setState(() => _isDeleting = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('アカウントを削除しますか？'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'あなたのライフイベント（届いたコメント・リアクションを含む）、フォロー、お知らせ、'
+            'プロフィールをすべて削除します。この操作は取り消せません。\n\n'
+            '確認のため、パスワードを入力してください。',
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _passwordController,
+            obscureText: true,
+            enabled: !_isDeleting,
+            decoration: InputDecoration(labelText: 'パスワード', errorText: _error),
+            onChanged: (_) => setState(() {}),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isDeleting ? null : () => Navigator.pop(context),
+          child: const Text('キャンセル'),
+        ),
+        TextButton(
+          style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
+          onPressed: _isDeleting || _passwordController.text.isEmpty ? null : _delete,
+          child: _isDeleting
+              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('すべて削除する'),
+        ),
+      ],
     );
   }
 }

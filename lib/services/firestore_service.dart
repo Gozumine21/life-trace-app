@@ -132,6 +132,18 @@ class FirestoreService {
         );
   }
 
+  /// ある記録に「応えて」書かれた記録を取得（応答記録）。
+  Stream<List<LifeEvent>> watchResponses(String eventId) {
+    return _lifeEvents
+        .where('respondsToEventId', isEqualTo: eventId)
+        .snapshots()
+        .map(
+          (snap) =>
+              snap.docs.map((d) => LifeEvent.fromMap(d.id, d.data())).toList()
+                ..sort((a, b) => a.createdAt.compareTo(b.createdAt)),
+        );
+  }
+
   Future<void> incrementLikeCount(String eventId, int delta) {
     return _lifeEvents.doc(eventId).update({
       'likeCount': FieldValue.increment(delta),
@@ -174,13 +186,15 @@ class FirestoreService {
   CollectionReference<Map<String, dynamic>> _reactions(String eventId) =>
       _lifeEvents.doc(eventId).collection('reactions');
 
-  Future<void> setReaction(String eventId, Reaction reaction) async {
+  /// リアクションを付ける（種類の変更も含む）。新しく付けたときは true を返す。
+  Future<bool> setReaction(String eventId, Reaction reaction) async {
     final ref = _reactions(eventId).doc(reaction.userId);
     final existing = await ref.get();
     await ref.set(reaction.toMap());
     if (!existing.exists) {
       await incrementLikeCount(eventId, 1);
     }
+    return !existing.exists;
   }
 
   Future<void> removeReaction(String eventId, String userId) async {
@@ -258,6 +272,27 @@ class FirestoreService {
         .set(notification.toMap());
   }
 
+  /// [toUid] にお知らせを届ける。自分自身の操作では送らない。
+  Future<void> sendNotification({
+    required String toUid,
+    required String fromUid,
+    required String type,
+    String? targetEventId,
+  }) {
+    if (toUid == fromUid) return Future.value();
+    final ref = _notifications(toUid).doc();
+    return ref.set(
+      AppNotification(
+        notificationId: ref.id,
+        type: type,
+        fromUserId: fromUid,
+        targetEventId: targetEventId,
+        isRead: false,
+        createdAt: DateTime.now(),
+      ).toMap(),
+    );
+  }
+
   Future<void> markNotificationRead(String uid, String notificationId) {
     return _notifications(uid).doc(notificationId).update({'isRead': true});
   }
@@ -271,6 +306,41 @@ class FirestoreService {
               .map((d) => AppNotification.fromMap(d.id, d.data()))
               .toList(),
         ));
+  }
+
+  // ---------------- account ----------------
+
+  /// アカウント削除の前に、本人のデータを消す。
+  ///
+  /// ライフイベント（とそのコメント・リアクション）、フォロー、ブロック、
+  /// 追体験の履歴、お知らせ、プロフィールを削除する。
+  Future<void> deleteAllUserData(String uid) async {
+    final events = await _lifeEvents.where('authorId', isEqualTo: uid).get();
+    for (final event in events.docs) {
+      await _deleteAll(_comments(event.id));
+      await _deleteAll(_reactions(event.id));
+      await event.reference.delete();
+    }
+    final following = await _follows.where('followerId', isEqualTo: uid).get();
+    for (final doc in following.docs) {
+      await unfollow(uid, doc.data()['followeeId'] as String);
+    }
+    await _deleteAll(_blocks.where('blockerId', isEqualTo: uid));
+    await _deleteAll(_experienceLogs.where('viewerId', isEqualTo: uid));
+    await _deleteAll(_notifications(uid));
+    await _users.doc(uid).delete();
+  }
+
+  Future<void> _deleteAll(Query<Map<String, dynamic>> query) async {
+    final snap = await query.get();
+    // バッチは1回あたり500件まで。
+    for (var i = 0; i < snap.docs.length; i += 400) {
+      final batch = _db.batch();
+      for (final doc in snap.docs.skip(i).take(400)) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+    }
   }
 
   // ---------------- experienceLogs ----------------

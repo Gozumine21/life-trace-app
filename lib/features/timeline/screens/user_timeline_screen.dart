@@ -21,7 +21,7 @@ class UserTimelineScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final profileAsync = ref.watch(userProfileProvider(uid));
-    final eventsAsync = ref.watch(userLifeEventsProvider(uid));
+    final eventsAsync = ref.watch(visibleUserLifeEventsProvider(uid));
     final isFollowingAsync = ref.watch(isFollowingProvider(uid));
     final currentUser = ref.watch(currentUserProvider);
     final isSelf = currentUser?.uid == uid;
@@ -96,6 +96,14 @@ class UserTimelineScreen extends ConsumerWidget {
                   padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
                   child: Column(
                     children: [
+                      if (profileAsync.valueOrNull?.bio case final bio? when bio.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: Text(bio, style: Theme.of(context).textTheme.bodyMedium),
+                          ),
+                        ),
                       if (!isSelf)
                         isFollowingAsync.when(
                           data: (isFollowing) => SizedBox(
@@ -145,12 +153,27 @@ class UserTimelineScreen extends ConsumerWidget {
                 Expanded(
                   child: eventsAsync.when(
                     data: (events) {
+                      final following = isFollowingAsync.valueOrNull ?? false;
                       if (events.isEmpty) {
-                        return const EmptyView(message: '公開されているライフイベントはありません');
+                        return EmptyView(
+                          message: following || isSelf
+                              ? '公開されているライフイベントはありません'
+                              : '公開されているライフイベントはありません。\nフォローすると、フォロワー限定の記録も読めるようになります。',
+                        );
                       }
                       return ListView.builder(
-                        itemCount: events.length,
+                        itemCount: events.length + (following || isSelf ? 0 : 1),
                         itemBuilder: (context, index) {
+                          if (index == events.length) {
+                            return Padding(
+                              padding: const EdgeInsets.all(16),
+                              child: Text(
+                                'フォローすると、この人のフォロワー限定の記録も読めるようになります。',
+                                style: Theme.of(context).textTheme.bodySmall,
+                                textAlign: TextAlign.center,
+                              ),
+                            );
+                          }
                           final event = events[index];
                           return LifeEventCard(
                             event: event,
