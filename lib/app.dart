@@ -12,7 +12,9 @@ class LifeTraceApp extends ConsumerWidget {
     final router = ref.watch(routerProvider);
     return MaterialApp.router(
       title: 'LifeTrace',
+      debugShowCheckedModeBanner: false,
       theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
       routerConfig: router,
     );
   }

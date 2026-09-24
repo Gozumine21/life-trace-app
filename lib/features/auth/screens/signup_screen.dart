@@ -18,6 +18,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _agreedToTerms = false;
+  bool _obscurePassword = true;
 
   @override
   void dispose() {
@@ -49,7 +50,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           case 'email-already-in-use':
             message = 'このメールアドレスは既に登録されています。ログイン画面からサインインしてください。';
           case 'network-request-failed':
-            message = 'ネットワークエラーです。WiFi接続を確認してください。';
+            message = 'インターネットに接続できませんでした。通信環境を確認してください。';
           case 'weak-password':
             message = 'パスワードが弱すぎます。6文字以上にしてください。';
           case 'invalid-email':
@@ -80,46 +81,70 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
           key: _formKey,
           child: ListView(
             children: [
-              const SizedBox(height: 24),
+              Text(
+                'かんたん3項目で登録できます',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 16),
               TextFormField(
                 controller: _nameController,
-                decoration: const InputDecoration(labelText: '表示名'),
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: '表示名（ニックネーム可）',
+                  helperText: 'ほかのユーザーに表示される名前です。あとから変更できます',
+                  prefixIcon: Icon(Icons.badge_outlined),
+                ),
                 validator: (v) =>
                     (v == null || v.trim().isEmpty) ? '表示名を入力してください' : null,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _emailController,
-                decoration: const InputDecoration(labelText: 'メールアドレス'),
+                decoration: const InputDecoration(
+                  labelText: 'メールアドレス',
+                  helperText: 'ログインとパスワード再設定に使います（公開されません）',
+                  prefixIcon: Icon(Icons.email_outlined),
+                ),
                 keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                autofillHints: const [AutofillHints.email],
                 validator: (v) =>
                     (v == null || !v.contains('@')) ? 'メールアドレスを入力してください' : null,
               ),
               const SizedBox(height: 16),
               TextFormField(
                 controller: _passwordController,
-                decoration: const InputDecoration(labelText: 'パスワード（6文字以上）'),
-                obscureText: true,
+                decoration: InputDecoration(
+                  labelText: 'パスワード（6文字以上）',
+                  prefixIcon: const Icon(Icons.lock_outline),
+                  suffixIcon: IconButton(
+                    icon: Icon(_obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+                    tooltip: _obscurePassword ? 'パスワードを表示' : 'パスワードを隠す',
+                    onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                  ),
+                ),
+                obscureText: _obscurePassword,
+                autofillHints: const [AutofillHints.newPassword],
                 validator: (v) =>
                     (v == null || v.length < 6) ? '6文字以上で入力してください' : null,
               ),
               const SizedBox(height: 8),
-              Row(
-                children: [
-                  Checkbox(
-                    value: _agreedToTerms,
-                    onChanged: (v) => setState(() => _agreedToTerms = v ?? false),
-                  ),
-                  const Text('利用規約に同意します'),
-                ],
+              // 文字部分をタップしてもチェックが切り替わるようにする。
+              CheckboxListTile(
+                contentPadding: EdgeInsets.zero,
+                controlAffinity: ListTileControlAffinity.leading,
+                value: _agreedToTerms,
+                onChanged: (v) => setState(() => _agreedToTerms = v ?? false),
+                title: const Text('利用規約に同意します'),
               ),
               Align(
                 alignment: Alignment.centerLeft,
-                child: TextButton(
+                child: TextButton.icon(
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const TermsScreen()),
                   ),
-                  child: const Text('利用規約を読む'),
+                  icon: const Icon(Icons.description_outlined),
+                  label: const Text('利用規約を読む'),
                 ),
               ),
               const SizedBox(height: 16),
@@ -131,7 +156,7 @@ class _SignupScreenState extends ConsumerState<SignupScreen> {
                         width: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text('登録する'),
+                    : const Text('登録してはじめる'),
               ),
             ],
           ),

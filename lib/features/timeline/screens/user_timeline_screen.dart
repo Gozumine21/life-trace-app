@@ -36,17 +36,8 @@ class UserTimelineScreen extends ConsumerWidget {
         ),
         actions: [
           if (!isSelf) ...[
-            IconButton(
-              icon: const Icon(Icons.menu_book_outlined),
-              tooltip: '追体験モード',
-              onPressed: isBlocked ? null : () => context.push('/experience/$uid'),
-            ),
-            IconButton(
-              icon: const Icon(Icons.show_chart),
-              tooltip: '感情グラフ',
-              onPressed: isBlocked ? null : () => context.push('/emotion-graph/$uid'),
-            ),
             PopupMenuButton<String>(
+              tooltip: 'その他の操作',
               onSelected: (value) async {
                 if (value == 'block') {
                   final confirmed = await showDialog<bool>(
@@ -101,23 +92,56 @@ class UserTimelineScreen extends ConsumerWidget {
             )
           : Column(
               children: [
-                if (!isSelf)
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: isFollowingAsync.when(
-                      data: (isFollowing) => SizedBox(
-                        width: double.infinity,
-                        child: FilledButton.tonal(
-                          onPressed: () => ref
-                              .read(followControllerProvider.notifier)
-                              .toggleFollow(uid, isFollowing),
-                          child: Text(isFollowing ? 'フォロー中' : 'フォローする'),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 4),
+                  child: Column(
+                    children: [
+                      if (!isSelf)
+                        isFollowingAsync.when(
+                          data: (isFollowing) => SizedBox(
+                            width: double.infinity,
+                            child: isFollowing
+                                ? FilledButton.tonalIcon(
+                                    onPressed: () => ref
+                                        .read(followControllerProvider.notifier)
+                                        .toggleFollow(uid, isFollowing),
+                                    icon: const Icon(Icons.check),
+                                    label: const Text('フォロー中（タップで解除）'),
+                                  )
+                                : FilledButton.icon(
+                                    onPressed: () => ref
+                                        .read(followControllerProvider.notifier)
+                                        .toggleFollow(uid, isFollowing),
+                                    icon: const Icon(Icons.person_add_alt),
+                                    label: const Text('フォローする'),
+                                  ),
+                          ),
+                          loading: () => const SizedBox.shrink(),
+                          error: (e, st) => const SizedBox.shrink(),
                         ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => context.push('/experience/$uid'),
+                              icon: const Icon(Icons.menu_book_outlined),
+                              label: const Text('追体験する'),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () => context.push('/emotion-graph/$uid'),
+                              icon: const Icon(Icons.show_chart),
+                              label: const Text('感情グラフ'),
+                            ),
+                          ),
+                        ],
                       ),
-                      loading: () => const SizedBox.shrink(),
-                      error: (e, st) => const SizedBox.shrink(),
-                    ),
+                    ],
                   ),
+                ),
                 Expanded(
                   child: eventsAsync.when(
                     data: (events) {

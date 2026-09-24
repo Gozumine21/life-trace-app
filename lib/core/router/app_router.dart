@@ -13,6 +13,8 @@ import '../../features/home/screens/home_shell.dart';
 import '../../features/life_event_form/screens/life_event_form_screen.dart';
 import '../../features/moderation/screens/report_management_screen.dart';
 import '../../features/notifications/screens/notifications_screen.dart';
+import '../../features/onboarding/providers/onboarding_providers.dart';
+import '../../features/onboarding/screens/onboarding_screen.dart';
 import '../../features/profile/screens/edit_profile_screen.dart';
 import '../../features/profile/screens/settings_screen.dart';
 import '../../features/search/screens/search_screen.dart';
@@ -22,6 +24,7 @@ import '../../features/timeline/screens/user_timeline_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   final authState = ref.watch(authStateChangesProvider);
+  final onboardingCompleted = ref.watch(onboardingCompletedProvider);
 
   return GoRouter(
     initialLocation: '/',
@@ -29,12 +32,24 @@ final routerProvider = Provider<GoRouter>((ref) {
       final isLoggedIn = authState.asData?.value != null;
       final isAuthRoute = state.matchedLocation == '/login' || state.matchedLocation == '/signup';
 
+      final isOnboardingRoute = state.matchedLocation == '/onboarding';
+      // 使い方ガイドはログイン前でも開けるようにする。
+      final isPublicRoute = isAuthRoute || state.matchedLocation == '/guide';
+
       if (authState.isLoading) return null;
-      if (!isLoggedIn && !isAuthRoute) return '/login';
+      // 初回起動時は、まずアプリの使い方を紹介する。
+      if (!onboardingCompleted) return isOnboardingRoute ? null : '/onboarding';
+      if (isOnboardingRoute) return isLoggedIn ? '/' : '/login';
+      if (!isLoggedIn && !isPublicRoute) return '/login';
       if (isLoggedIn && isAuthRoute) return '/';
       return null;
     },
     routes: [
+      GoRoute(path: '/onboarding', builder: (context, state) => const OnboardingScreen()),
+      GoRoute(
+        path: '/guide',
+        builder: (context, state) => const OnboardingScreen(isReplay: true),
+      ),
       GoRoute(
         path: '/',
         builder: (context, state) {

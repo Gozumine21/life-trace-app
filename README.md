@@ -1,17 +1,48 @@
-# life_trace_app
+# LifeTrace
 
-A new Flutter project.
+人生の出来事を「ライフイベント」として記録し、感情グラフで振り返り、ほかの人の人生を追体験できるアプリです。
 
-## Getting Started
+現在のバージョン: **1.1.0**（変更点は [CHANGELOG.md](CHANGELOG.md)）
 
-This project is a starting point for a Flutter application.
+## 使い方
 
-A few resources to get you started if this is your first Flutter project:
+初めて起動すると使い方ガイドが表示されます。あとから見直すときは、ホーム右上の「？」か「設定 → 使い方ガイド」を開いてください。
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+### 1. アカウントを作る
+ログイン画面の「無料でアカウントを作成」から、表示名・メールアドレス・パスワードの3項目を入力します。
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+### 2. 出来事を記録する
+画面右下の **「記録する」** ボタンを押し、表示される5つのステップに沿って入力します。
+
+| ステップ | 内容 |
+| --- | --- |
+| ① いつの出来事？ | 年と月をタップで選びます（おおよそで大丈夫です） |
+| ② 何があった？ | タイトルと本文を書きます |
+| ③ どんな気持ちだった？ | 😊 などの気持ちを1つ選びます。感情グラフの高さになります |
+| ④ どんなジャンル？ | 📚学業・💼仕事などから選びます |
+| ⑤ 誰に見せる？ | 全体公開／フォロワー限定／非公開（自分だけ） |
+
+特に大切な出来事は「人生の転機としてマークする」をオンにすると、グラフや一覧で目立つように表示されます。写真も追加できます。
+
+### 3. 振り返る
+「マイページ」→「感情グラフ」で、気持ちの浮き沈みやジャンルの割合を見られます。
+
+### 4. ほかの人の人生にふれる
+- **ホーム**: みんなが公開したライフイベントが新しい順に並びます
+- **さがす**: ジャンルや気持ちで探せます
+- ユーザーのページで **「追体験する」** を押すと、その人の人生を1つずつめくって読めます。❤️いいね／🤝わかる／🥹感動した で気持ちを伝えましょう
+- **お知らせ**: いいね・コメント・フォローが届くと、下部メニューに件数が表示されます
+
+困ったユーザーがいる場合は、ユーザーページ右上の「︙」からブロック・通報ができます。
+
+## 開発者向け
+
+- Flutter 3.44 / Dart 3.12、状態管理は Riverpod、画面遷移は go_router、バックエンドは Firebase（Auth / Firestore）
+- 設計資料は [docs/](docs/)、残りの作業は [todo.md](todo.md) を参照
+
+```sh
+flutter pub get
+./start-emulator.sh   # Firebase エミュレータを起動（ローカル開発時）
+flutter run
+flutter analyze && flutter test
+```

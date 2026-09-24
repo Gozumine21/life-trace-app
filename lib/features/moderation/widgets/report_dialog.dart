@@ -28,13 +28,19 @@ Future<bool> showReportDialog({
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text('理由を選択してください'),
-                  ...ReportReason.all.map(
-                    (r) => RadioListTile<String>(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(ReportReason.labelFor(r)),
-                      value: r,
-                      groupValue: reason,
-                      onChanged: (v) => setState(() => reason = v!),
+                  RadioGroup<String>(
+                    groupValue: reason,
+                    onChanged: (v) => setState(() => reason = v!),
+                    child: Column(
+                      children: ReportReason.all
+                          .map(
+                            (r) => RadioListTile<String>(
+                              contentPadding: EdgeInsets.zero,
+                              title: Text(ReportReason.labelFor(r)),
+                              value: r,
+                            ),
+                          )
+                          .toList(),
                     ),
                   ),
                   const SizedBox(height: 8),

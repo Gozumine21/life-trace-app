@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../core/providers/firebase_providers.dart';
+import '../../../core/utils/constants.dart';
 import '../../auth/providers/auth_providers.dart';
 import '../../auth/screens/terms_screen.dart';
 import '../../moderation/providers/moderation_providers.dart';
@@ -17,20 +18,38 @@ class SettingsScreen extends ConsumerWidget {
       appBar: AppBar(title: const Text('設定')),
       body: ListView(
         children: [
+          const _SectionTitle('ヘルプ'),
+          ListTile(
+            leading: const Icon(Icons.help_outline),
+            title: const Text('使い方ガイド'),
+            subtitle: const Text('アプリの使い方をもう一度見る'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/guide'),
+          ),
           ListTile(
             leading: const Icon(Icons.description_outlined),
             title: const Text('利用規約'),
+            trailing: const Icon(Icons.chevron_right),
             onTap: () => Navigator.of(context).push(
               MaterialPageRoute(builder: (_) => const TermsScreen()),
             ),
           ),
-          if (isAdmin)
+          if (isAdmin) ...[
+            const _SectionTitle('管理者'),
             ListTile(
               leading: const Icon(Icons.flag_outlined),
               title: const Text('通報管理'),
+              trailing: const Icon(Icons.chevron_right),
               onTap: () => context.push('/admin/reports'),
             ),
-          const Divider(),
+          ],
+          const _SectionTitle('アカウント'),
+          ListTile(
+            leading: const Icon(Icons.edit_outlined),
+            title: const Text('プロフィールを編集'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => context.push('/profile/edit'),
+          ),
           ListTile(
             leading: const Icon(Icons.logout),
             title: const Text('ログアウト'),
@@ -70,7 +89,34 @@ class SettingsScreen extends ConsumerWidget {
               }
             },
           ),
+          const SizedBox(height: 24),
+          Center(
+            child: Text(
+              'LifeTrace バージョン ${AppInfo.version}',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+          const SizedBox(height: 24),
         ],
+      ),
+    );
+  }
+}
+
+class _SectionTitle extends StatelessWidget {
+  final String title;
+
+  const _SectionTitle(this.title);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+      child: Text(
+        title,
+        style: Theme.of(context).textTheme.labelLarge?.copyWith(
+              color: Theme.of(context).colorScheme.primary,
+            ),
       ),
     );
   }

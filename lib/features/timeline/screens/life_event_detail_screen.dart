@@ -32,6 +32,21 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
     super.dispose();
   }
 
+  Future<void> _sendComment() async {
+    final text = _commentController.text.trim();
+    if (text.isEmpty) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      await ref.read(lifeEventControllerProvider.notifier).addComment(widget.eventId, text);
+      _commentController.clear();
+      if (mounted) FocusScope.of(context).unfocus();
+    } catch (e) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('コメントを送信できませんでした。もう一度お試しください。')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final eventAsync = ref.watch(lifeEventProvider(widget.eventId));
@@ -45,7 +60,7 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ライフイベント詳細'),
+        title: const Text('ライフイベント'),
         actions: [
           if (loadedEvent != null && !isOwnerOfLoadedEvent && currentUser != null)
             IconButton(
@@ -164,15 +179,20 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
                           loading: () => const SizedBox.shrink(),
                           error: (e, st) => const SizedBox.shrink(),
                         ),
-                        const SizedBox(width: 12),
+                        const Spacer(),
                         if (isOwner)
-                          IconButton(
+                          TextButton.icon(
                             icon: const Icon(Icons.edit_outlined),
+                            label: const Text('編集'),
                             onPressed: () => context.push('/life-event/${event.eventId}/edit'),
                           ),
                         if (isOwner)
-                          IconButton(
+                          TextButton.icon(
                             icon: const Icon(Icons.delete_outline),
+                            label: const Text('削除'),
+                            style: TextButton.styleFrom(
+                              foregroundColor: Theme.of(context).colorScheme.error,
+                            ),
                             onPressed: () async {
                               final confirmed = await showDialog<bool>(
                                 context: context,
@@ -186,7 +206,7 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
                                     ),
                                     TextButton(
                                       onPressed: () => Navigator.pop(context, true),
-                                      child: const Text('削除'),
+                                      child: const Text('削除する'),
                                     ),
                                   ],
                                 ),
@@ -196,7 +216,12 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
                                   await ref
                                       .read(lifeEventControllerProvider.notifier)
                                       .deleteLifeEvent(widget.eventId);
-                                  if (context.mounted) context.pop();
+                                  if (context.mounted) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(content: Text('ライフイベントを削除しました')),
+                                    );
+                                    context.pop();
+                                  }
                                 } catch (e) {
                                   if (context.mounted) {
                                     ScaffoldMessenger.of(context).showSnackBar(
@@ -210,14 +235,17 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
                       ],
                     ),
                     const Divider(height: 32),
-                    const Text('コメント', style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text(
+                      'コメント（${event.commentCount}件）',
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     const SizedBox(height: 8),
                     commentsAsync.when(
                       data: (comments) {
                         if (comments.isEmpty) {
                           return const Padding(
                             padding: EdgeInsets.symmetric(vertical: 8),
-                            child: Text('まだコメントはありません'),
+                            child: Text('まだコメントはありません。最初の感想を送ってみましょう。'),
                           );
                         }
                         return Column(
@@ -255,22 +283,22 @@ class _LifeEventDetailScreenState extends ConsumerState<LifeEventDetailScreen> {
                       Expanded(
                         child: TextField(
                           controller: _commentController,
+                          minLines: 1,
+                          maxLines: 4,
                           decoration: const InputDecoration(
-                            hintText: 'コメントを入力',
+                            hintText: '感想やはげましを送る',
                             isDense: true,
                           ),
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.send),
-                        onPressed: () async {
-                          final text = _commentController.text.trim();
-                          if (text.isEmpty) return;
-                          await ref
-                              .read(lifeEventControllerProvider.notifier)
-                              .addComment(widget.eventId, text);
-                          _commentController.clear();
-                        },
+                      const SizedBox(width: 4),
+                      ValueListenableBuilder(
+                        valueListenable: _commentController,
+                        builder: (context, value, _) => IconButton.filled(
+                          icon: const Icon(Icons.send),
+                          tooltip: 'コメントを送信',
+                          onPressed: value.text.trim().isEmpty ? null : _sendComment,
+                        ),
                       ),
                     ],
                   ),

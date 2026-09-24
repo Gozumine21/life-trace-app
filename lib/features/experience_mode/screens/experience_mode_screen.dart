@@ -73,10 +73,22 @@ class _ExperienceModeScreenState extends ConsumerState<ExperienceModeScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '${index + 1} / ${events.length}',
-                      style: Theme.of(context).textTheme.bodySmall,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: LinearProgressIndicator(
+                            value: (index + 1) / events.length,
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          '${index + 1} / ${events.length}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
                     ),
+                    const SizedBox(height: 12),
                     const SizedBox(height: 8),
                     Text(
                       event.occurredYearMonth,
@@ -96,6 +108,8 @@ class _ExperienceModeScreenState extends ConsumerState<ExperienceModeScreen> {
                     const SizedBox(height: 16),
                     Text(event.body, style: const TextStyle(fontSize: 16, height: 1.6)),
                     const SizedBox(height: 24),
+                    Text('この出来事に気持ちを送る', style: Theme.of(context).textTheme.titleSmall),
+                    const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
                       children: ReactionType.all.map((type) {
@@ -107,7 +121,7 @@ class _ExperienceModeScreenState extends ConsumerState<ExperienceModeScreen> {
                                 selected ? Icons.check_circle : Icons.add_circle_outline,
                                 size: 16,
                               ),
-                              label: Text(ReactionType.labelFor(type)),
+                              label: Text('${ReactionType.emojiFor(type)} ${ReactionType.labelFor(type)}'),
                               onPressed: () => ref
                                   .read(lifeEventControllerProvider.notifier)
                                   .toggleReaction(event.eventId, selected, type),
@@ -118,8 +132,23 @@ class _ExperienceModeScreenState extends ConsumerState<ExperienceModeScreen> {
                         );
                       }).toList(),
                     ),
-                    const SizedBox(height: 8),
-                    const Text('上下にスワイプして次のイベントへ', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    const SizedBox(height: 24),
+                    Center(
+                      child: Column(
+                        children: [
+                          Icon(
+                            index == events.length - 1 ? Icons.flag_outlined : Icons.keyboard_double_arrow_up,
+                            color: Theme.of(context).colorScheme.outline,
+                          ),
+                          Text(
+                            index == events.length - 1
+                                ? '最後まで読みました'
+                                : '上にスワイプして次の出来事へ',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ),
               );

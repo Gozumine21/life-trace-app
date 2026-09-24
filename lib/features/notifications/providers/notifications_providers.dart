@@ -9,3 +9,9 @@ final notificationsProvider = StreamProvider<List<AppNotification>>((ref) {
   if (user == null) return Stream.value(const []);
   return ref.watch(firestoreServiceProvider).watchNotifications(user.uid);
 });
+
+/// ナビゲーションバーのバッジに表示する未読件数。
+final unreadNotificationCountProvider = Provider<int>((ref) {
+  final notifications = ref.watch(notificationsProvider).asData?.value ?? const [];
+  return notifications.where((n) => !n.isRead).length;
+});

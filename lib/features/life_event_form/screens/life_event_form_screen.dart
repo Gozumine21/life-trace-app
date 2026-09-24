@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../core/providers/firebase_providers.dart';
@@ -24,14 +23,17 @@ class LifeEventFormScreen extends ConsumerStatefulWidget {
 }
 
 class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
+  static const _titleMaxLength = 50;
+
   final _formKey = GlobalKey<FormState>();
   final _titleController = TextEditingController();
   final _bodyController = TextEditingController();
-  final _yearController = TextEditingController();
-  final _monthController = TextEditingController();
 
+  // 新規作成時は今月を初期値にして、入力の手間を減らす。
+  int _year = DateTime.now().year;
+  int _month = DateTime.now().month;
   String _category = LifeEventCategories.all.first;
-  String _emotionLabel = EmotionTag.all.first.label;
+  String _emotionLabel = '普通';
   bool _isTurningPoint = false;
   String _visibility = VisibilityOption.public;
   final List<File> _newImages = [];
@@ -39,29 +41,38 @@ class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
   bool _loadedInitialValues = false;
   bool _isSaving = false;
 
-  void _loadFromEvent(dynamic event) {
+  /// 入力内容が変わったか。戻るときに破棄の確認を出すために使う。
+  bool _isDirty = false;
+
+  void _loadFromEvent(LifeEvent? event) {
     if (_loadedInitialValues || event == null) return;
     _titleController.text = event.title;
     _bodyController.text = event.body;
-    final parts = (event.occurredYearMonth as String).split('-');
+    final parts = event.occurredYearMonth.split('-');
     if (parts.length == 2) {
-      _yearController.text = parts[0];
-      _monthController.text = parts[1];
+      _year = int.tryParse(parts[0]) ?? _year;
+      _month = int.tryParse(parts[1]) ?? _month;
     }
     _category = event.category;
     _emotionLabel = event.emotionTag;
     _isTurningPoint = event.isTurningPoint;
-    _visibility = (event.visibility as EventVisibility).name;
-    _existingImageUrls = List<String>.from(event.imageUrls as List);
+    _visibility = event.visibility.name;
+    _existingImageUrls = List<String>.from(event.imageUrls);
     _loadedInitialValues = true;
+  }
+
+  /// 入力値を変更し、未保存の変更ありとして記録する。
+  void _update(VoidCallback change) {
+    setState(() {
+      change();
+      _isDirty = true;
+    });
   }
 
   @override
   void dispose() {
     _titleController.dispose();
     _bodyController.dispose();
-    _yearController.dispose();
-    _monthController.dispose();
     super.dispose();
   }
 
@@ -69,21 +80,60 @@ class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
     final picker = ImagePicker();
     final picked = await picker.pickMultiImage(imageQuality: 80);
     if (picked.isNotEmpty) {
-      setState(() {
-        _newImages.addAll(picked.map((p) => File(p.path)));
+      _update(() => _newImages.addAll(picked.map((p) => File(p.path))));
+    }
+  }
+
+  Future<void> _pickYearMonth() async {
+    final result = await showDialog<(int, int)>(
+      context: context,
+      builder: (context) => _YearMonthPickerDialog(initialYear: _year, initialMonth: _month),
+    );
+    if (result != null) {
+      _update(() {
+        _year = result.$1;
+        _month = result.$2;
       });
     }
   }
 
+  Future<bool> _confirmDiscard() async {
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('入力内容を破棄しますか？'),
+        content: const Text('保存していない内容は失われます。'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('編集を続ける'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('破棄する'),
+          ),
+        ],
+      ),
+    );
+    return discard ?? false;
+  }
+
   Future<void> _submit() async {
-    if (!_formKey.currentState!.validate()) return;
+    if (!_formKey.currentState!.validate()) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('未入力の項目があります。赤く表示された欄を確認してください。')),
+      );
+      return;
+    }
     final user = ref.read(currentUserProvider);
     if (user == null) return;
 
     setState(() => _isSaving = true);
+    final messenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
     try {
       final occurredYearMonth =
-          '${_yearController.text.padLeft(4, '0')}-${_monthController.text.padLeft(2, '0')}';
+          '${_year.toString().padLeft(4, '0')}-${_month.toString().padLeft(2, '0')}';
       final emotionScore = EmotionTag.scoreFor(_emotionLabel);
 
       if (widget.isEditing) {
@@ -108,7 +158,6 @@ class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
                 'imageUrls': imageUrls,
               },
             );
-        if (mounted) context.pop();
       } else {
         final eventId = await ref
             .read(lifeEventControllerProvider.notifier)
@@ -131,13 +180,17 @@ class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
               .read(lifeEventControllerProvider.notifier)
               .updateLifeEvent(eventId, {'imageUrls': uploaded});
         }
-        if (mounted) context.pop();
       }
+      if (!mounted) return;
+      _isDirty = false;
+      navigator.pop();
+      messenger.showSnackBar(
+        SnackBar(content: Text(widget.isEditing ? '変更を保存しました' : 'ライフイベントを記録しました')),
+      );
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('保存に失敗しました: $e')));
-      }
+      messenger.showSnackBar(
+        SnackBar(content: Text('保存できませんでした。通信環境を確認して、もう一度お試しください。\n($e)')),
+      );
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -147,174 +200,348 @@ class _LifeEventFormScreenState extends ConsumerState<LifeEventFormScreen> {
   Widget build(BuildContext context) {
     if (widget.isEditing) {
       final eventAsync = ref.watch(lifeEventProvider(widget.eventId!));
-      eventAsync.whenData((event) => _loadFromEvent(event));
+      eventAsync.whenData(_loadFromEvent);
     }
+    final colorScheme = Theme.of(context).colorScheme;
 
-    return Scaffold(
-      appBar: AppBar(title: Text(widget.isEditing ? 'ライフイベント編集' : 'ライフイベント作成')),
-      body: Form(
-        key: _formKey,
-        child: ListView(
-          padding: const EdgeInsets.all(16),
-          children: [
-            TextFormField(
-              controller: _titleController,
-              decoration: const InputDecoration(labelText: 'タイトル'),
-              validator: (v) => (v == null || v.trim().isEmpty) ? 'タイトルを入力してください' : null,
+    return PopScope(
+      canPop: !_isDirty || _isSaving,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final navigator = Navigator.of(context);
+        if (await _confirmDiscard()) navigator.pop();
+      },
+      child: Scaffold(
+        appBar: AppBar(
+          title: Text(widget.isEditing ? 'ライフイベントを編集' : 'ライフイベントを記録'),
+          actions: [
+            TextButton(
+              onPressed: _isSaving ? null : _submit,
+              child: const Text('保存'),
             ),
-            const SizedBox(height: 16),
-            TextFormField(
-              controller: _bodyController,
-              decoration: const InputDecoration(labelText: '本文'),
-              maxLines: 5,
-              validator: (v) => (v == null || v.trim().isEmpty) ? '本文を入力してください' : null,
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    controller: _yearController,
-                    decoration: const InputDecoration(labelText: '発生年 (例: 2015)'),
-                    keyboardType: TextInputType.number,
-                    validator: (v) =>
-                        (v == null || v.trim().length != 4) ? '4桁で入力' : null,
+          ],
+        ),
+        body: Form(
+          key: _formKey,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+            children: [
+              const _SectionHeader(
+                step: '1',
+                title: 'いつの出来事？',
+                help: 'おおよその年月で大丈夫です',
+              ),
+              InkWell(
+                onTap: _pickYearMonth,
+                borderRadius: BorderRadius.circular(12),
+                child: InputDecorator(
+                  decoration: const InputDecoration(
+                    labelText: '年月',
+                    prefixIcon: Icon(Icons.calendar_month_outlined),
+                    suffixIcon: Icon(Icons.arrow_drop_down),
                   ),
+                  child: Text('$_year年 $_month月'),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextFormField(
-                    controller: _monthController,
-                    decoration: const InputDecoration(labelText: '発生月 (1-12)'),
-                    keyboardType: TextInputType.number,
-                    validator: (v) {
-                      final n = int.tryParse(v ?? '');
-                      if (n == null || n < 1 || n > 12) return '1〜12で入力';
-                      return null;
-                    },
+              ),
+              const _SectionHeader(
+                step: '2',
+                title: '何があった？',
+                help: 'タイトルは一言で。本文には当時の様子を自由に書きましょう',
+              ),
+              TextFormField(
+                controller: _titleController,
+                maxLength: _titleMaxLength,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  labelText: 'タイトル',
+                  hintText: '例: 第一志望の大学に合格した',
+                ),
+                onChanged: (_) => _update(() {}),
+                validator: (v) => (v == null || v.trim().isEmpty) ? 'タイトルを入力してください' : null,
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _bodyController,
+                minLines: 4,
+                maxLines: 12,
+                decoration: const InputDecoration(
+                  labelText: '本文',
+                  hintText: '例: 何度も模試で落ち込んだけれど、最後まで諦めずに勉強を続けた。合格発表の日は家族みんなで喜んだ。',
+                  alignLabelWithHint: true,
+                ),
+                onChanged: (_) => _update(() {}),
+                validator: (v) => (v == null || v.trim().isEmpty) ? '本文を入力してください' : null,
+              ),
+              const _SectionHeader(
+                step: '3',
+                title: 'どんな気持ちだった？',
+                help: '選んだ気持ちが「感情グラフ」の高さになります',
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: EmotionTag.all.map((tag) {
+                  return ChoiceChip(
+                    label: Text('${tag.emoji} ${tag.label}'),
+                    selected: tag.label == _emotionLabel,
+                    onSelected: (_) => _update(() => _emotionLabel = tag.label),
+                  );
+                }).toList(),
+              ),
+              const _SectionHeader(
+                step: '4',
+                title: 'どんなジャンル？',
+                help: '検索やグラフの分類に使われます',
+              ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: LifeEventCategories.all.map((c) {
+                  return ChoiceChip(
+                    label: Text('${LifeEventCategories.emojiFor(c)} $c'),
+                    selected: c == _category,
+                    onSelected: (_) => _update(() => _category = c),
+                  );
+                }).toList(),
+              ),
+              const _SectionHeader(step: '5', title: '誰に見せる？'),
+              RadioGroup<String>(
+                groupValue: _visibility,
+                onChanged: (value) => _update(() => _visibility = value!),
+                child: Column(
+                  children: VisibilityOption.all
+                      .map(
+                        (v) => RadioListTile<String>(
+                          contentPadding: EdgeInsets.zero,
+                          value: v,
+                          title: Text(VisibilityOption.labelFor(v)),
+                          subtitle: Text(VisibilityOption.descriptionFor(v)),
+                        ),
+                      )
+                      .toList(),
+                ),
+              ),
+              const _SectionHeader(title: 'そのほか（任意）'),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                secondary: const Icon(Icons.bolt, color: Colors.amber),
+                title: const Text('人生の転機としてマークする'),
+                subtitle: const Text('感情グラフや一覧で目立つように表示されます'),
+                value: _isTurningPoint,
+                onChanged: (v) => _update(() => _isTurningPoint = v),
+              ),
+              const SizedBox(height: 8),
+              Text('写真', style: Theme.of(context).textTheme.titleSmall),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  ..._existingImageUrls.map(
+                    (url) => _ImageThumbnail(
+                      image: AppImage(url: url, width: 80, height: 80, fit: BoxFit.cover),
+                      onRemove: () => _update(() => _existingImageUrls.remove(url)),
+                    ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            DropdownButtonFormField<String>(
-              initialValue: _category,
-              decoration: const InputDecoration(labelText: 'カテゴリ'),
-              items: LifeEventCategories.all
-                  .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-                  .toList(),
-              onChanged: (v) => setState(() => _category = v!),
-            ),
-            const SizedBox(height: 16),
-            const Text('感情タグ', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: EmotionTag.all.map((tag) {
-                final selected = tag.label == _emotionLabel;
-                return ChoiceChip(
-                  label: Text(tag.label),
-                  selected: selected,
-                  onSelected: (_) => setState(() => _emotionLabel = tag.label),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 16),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('人生の転機（ターニングポイント）として表示'),
-              value: _isTurningPoint,
-              onChanged: (v) => setState(() => _isTurningPoint = v),
-            ),
-            const SizedBox(height: 8),
-            const Text('公開範囲', style: TextStyle(fontWeight: FontWeight.bold)),
-            RadioGroup<String>(
-              groupValue: _visibility,
-              onChanged: (value) => setState(() => _visibility = value!),
-              child: Column(
-                children: VisibilityOption.all
-                    .map(
-                      (v) => RadioListTile<String>(
-                        contentPadding: EdgeInsets.zero,
-                        value: v,
-                        title: Text(VisibilityOption.labelFor(v)),
+                  ..._newImages.map(
+                    (file) => _ImageThumbnail(
+                      image: Image.file(file, width: 80, height: 80, fit: BoxFit.cover),
+                      onRemove: () => _update(() => _newImages.remove(file)),
+                    ),
+                  ),
+                  Tooltip(
+                    message: '写真を追加',
+                    child: InkWell(
+                      onTap: _pickImages,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        width: 80,
+                        height: 80,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: colorScheme.outline),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.add_photo_alternate_outlined, color: colorScheme.primary),
+                            const SizedBox(height: 4),
+                            Text('追加', style: Theme.of(context).textTheme.bodySmall),
+                          ],
+                        ),
                       ),
-                    )
-                    .toList(),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 32),
+              FilledButton.icon(
+                onPressed: _isSaving ? null : _submit,
+                icon: _isSaving
+                    ? const SizedBox(
+                        height: 20,
+                        width: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.check),
+                label: Text(
+                  _isSaving ? '保存しています…' : (widget.isEditing ? '変更を保存する' : 'この内容で記録する'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _SectionHeader extends StatelessWidget {
+  final String? step;
+  final String title;
+  final String? help;
+
+  const _SectionHeader({this.step, required this.title, this.help});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+    return Padding(
+      padding: const EdgeInsets.only(top: 24, bottom: 10),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (step != null) ...[
+            CircleAvatar(
+              radius: 12,
+              backgroundColor: colorScheme.primary,
+              child: Text(
+                step!,
+                style: TextStyle(fontSize: 12, color: colorScheme.onPrimary, fontWeight: FontWeight.bold),
               ),
             ),
-            const SizedBox(height: 8),
-            const Text('画像', style: TextStyle(fontWeight: FontWeight.bold)),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                ..._existingImageUrls.map(
-                  (url) => Stack(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: AppImage(url: url, width: 80, height: 80, fit: BoxFit.cover),
-                      ),
-                      Positioned(
-                        right: -4,
-                        top: -4,
-                        child: IconButton(
-                          icon: const Icon(Icons.cancel, size: 18),
-                          onPressed: () => setState(() => _existingImageUrls.remove(url)),
-                        ),
-                      ),
-                    ],
-                  ),
+                Text(title, style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                if (help != null)
+                  Text(help!, style: textTheme.bodySmall?.copyWith(color: colorScheme.onSurfaceVariant)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ImageThumbnail extends StatelessWidget {
+  final Widget image;
+  final VoidCallback onRemove;
+
+  const _ImageThumbnail({required this.image, required this.onRemove});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        ClipRRect(borderRadius: BorderRadius.circular(8), child: image),
+        Positioned(
+          right: -4,
+          top: -4,
+          child: IconButton(
+            icon: const Icon(Icons.cancel, size: 20),
+            tooltip: '写真を外す',
+            onPressed: onRemove,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// 年と月をタップだけで選べるダイアログ。結果は (年, 月) で返す。
+class _YearMonthPickerDialog extends StatefulWidget {
+  final int initialYear;
+  final int initialMonth;
+
+  const _YearMonthPickerDialog({required this.initialYear, required this.initialMonth});
+
+  @override
+  State<_YearMonthPickerDialog> createState() => _YearMonthPickerDialogState();
+}
+
+class _YearMonthPickerDialogState extends State<_YearMonthPickerDialog> {
+  static const _minYear = 1900;
+  final _maxYear = DateTime.now().year;
+  late int _year = widget.initialYear.clamp(_minYear, _maxYear);
+  late int _month = widget.initialMonth;
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('年月を選ぶ'),
+      content: SizedBox(
+        width: 320,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.chevron_left),
+                  tooltip: '前の年',
+                  onPressed: _year > _minYear ? () => setState(() => _year--) : null,
                 ),
-                ..._newImages.map(
-                  (file) => Stack(
-                    children: [
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Image.file(file, width: 80, height: 80, fit: BoxFit.cover),
-                      ),
-                      Positioned(
-                        right: -4,
-                        top: -4,
-                        child: IconButton(
-                          icon: const Icon(Icons.cancel, size: 18),
-                          onPressed: () => setState(() => _newImages.remove(file)),
-                        ),
-                      ),
-                    ],
-                  ),
+                DropdownButton<int>(
+                  value: _year,
+                  menuMaxHeight: 320,
+                  items: [
+                    for (var y = _maxYear; y >= _minYear; y--)
+                      DropdownMenuItem(value: y, child: Text('$y年')),
+                  ],
+                  onChanged: (v) => setState(() => _year = v!),
                 ),
-                InkWell(
-                  onTap: _pickImages,
-                  child: Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      border: Border.all(color: Colors.grey),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: const Icon(Icons.add_photo_alternate_outlined),
-                  ),
+                IconButton(
+                  icon: const Icon(Icons.chevron_right),
+                  tooltip: '次の年',
+                  onPressed: _year < _maxYear ? () => setState(() => _year++) : null,
                 ),
               ],
             ),
-            const SizedBox(height: 24),
-            FilledButton(
-              onPressed: _isSaving ? null : _submit,
-              child: _isSaving
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : Text(widget.isEditing ? '更新する' : '保存する'),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              alignment: WrapAlignment.center,
+              children: [
+                for (var m = 1; m <= 12; m++)
+                  SizedBox(
+                    width: 64,
+                    child: ChoiceChip(
+                      label: SizedBox(width: double.infinity, child: Text('$m月', textAlign: TextAlign.center)),
+                      showCheckmark: false,
+                      selected: m == _month,
+                      onSelected: (_) => setState(() => _month = m),
+                    ),
+                  ),
+              ],
             ),
           ],
         ),
       ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('キャンセル')),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, (_year, _month)),
+          child: const Text('決定'),
+        ),
+      ],
     );
   }
 }

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../core/utils/constants.dart';
+
 class EmotionScoreBadge extends StatelessWidget {
   final String emotionTag;
   final int emotionScore;
@@ -26,7 +28,7 @@ class EmotionScoreBadge extends StatelessWidget {
         border: Border.all(color: _color),
       ),
       child: Text(
-        emotionTag,
+        '${EmotionTag.emojiFor(emotionTag)} $emotionTag',
         style: TextStyle(color: _color, fontWeight: FontWeight.bold, fontSize: 12),
       ),
     );

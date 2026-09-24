@@ -27,6 +27,7 @@ class MyPageScreen extends ConsumerWidget {
         actions: [
           IconButton(
             icon: const Icon(Icons.settings_outlined),
+            tooltip: '設定',
             onPressed: () => context.push('/settings'),
           ),
         ],
@@ -98,23 +99,36 @@ class MyPageScreen extends ConsumerWidget {
                   ),
                 ),
               ),
-              const SliverToBoxAdapter(
+              SliverToBoxAdapter(
                 child: Padding(
-                  padding: EdgeInsets.fromLTRB(16, 16, 16, 4),
-                  child: Text(
-                    '自分のライフライン',
-                    style: TextStyle(fontWeight: FontWeight.bold),
+                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 4),
+                  child: Row(
+                    children: [
+                      const Text(
+                        '自分のライフライン',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                      const Spacer(),
+                      if (eventsAsync.asData?.value case final events? when events.isNotEmpty)
+                        Text(
+                          '${events.length}件の記録・転機${events.where((e) => e.isTurningPoint).length}件',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                    ],
                   ),
                 ),
               ),
               eventsAsync.when(
                 data: (events) {
                   if (events.isEmpty) {
-                    return const SliverFillRemaining(
+                    return SliverFillRemaining(
                       hasScrollBody: false,
                       child: EmptyView(
-                        message: 'まだライフイベントがありません。\n右下の＋から追加しましょう。',
+                        message: 'まだライフイベントがありません。\n入学・就職・引っ越しなど、\n心に残っている出来事から書いてみましょう。',
                         icon: Icons.auto_stories_outlined,
+                        actionLabel: '最初の記録をする',
+                        actionIcon: Icons.edit_note,
+                        onAction: () => context.push('/life-event/new'),
                       ),
                     );
                   }
@@ -134,16 +148,12 @@ class MyPageScreen extends ConsumerWidget {
                   child: ErrorView(error: e, onRetry: () => ref.invalidate(userLifeEventsProvider(user.uid))),
                 ),
               ),
-              const SliverToBoxAdapter(child: SizedBox(height: 80)),
+              const SliverToBoxAdapter(child: SizedBox(height: 96)),
             ],
           );
         },
         loading: () => const LoadingView(),
         error: (e, st) => ErrorView(error: e, onRetry: () => ref.invalidate(currentUserProfileProvider)),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () => context.push('/life-event/new'),
-        child: const Icon(Icons.add),
       ),
     );
   }

@@ -19,7 +19,7 @@ class SearchScreen extends ConsumerWidget {
     final notifier = ref.read(searchQueryProvider.notifier);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('検索')),
+      appBar: AppBar(title: const Text('さがす')),
       body: Column(
         children: [
           Padding(
@@ -28,16 +28,26 @@ class SearchScreen extends ConsumerWidget {
               children: [
                 TextField(
                   decoration: const InputDecoration(
-                    labelText: 'キーワード（タイトル・本文）',
+                    labelText: 'キーワードで絞り込む（任意）',
+                    hintText: '例: 受験、転職、結婚',
                     prefixIcon: Icon(Icons.search),
                   ),
+                  textInputAction: TextInputAction.search,
                   onChanged: notifier.setKeyword,
                 ),
                 const SizedBox(height: 12),
                 SegmentedButton<SearchFilterType>(
                   segments: const [
-                    ButtonSegment(value: SearchFilterType.category, label: Text('カテゴリ')),
-                    ButtonSegment(value: SearchFilterType.emotionTag, label: Text('感情タグ')),
+                    ButtonSegment(
+                      value: SearchFilterType.category,
+                      icon: Icon(Icons.category_outlined),
+                      label: Text('ジャンルで'),
+                    ),
+                    ButtonSegment(
+                      value: SearchFilterType.emotionTag,
+                      icon: Icon(Icons.mood),
+                      label: Text('気持ちで'),
+                    ),
                   ],
                   selected: {query.filterType},
                   onSelectionChanged: (selection) {
@@ -59,7 +69,11 @@ class SearchScreen extends ConsumerWidget {
                           : EmotionTag.all.map((e) => e.label).toList())
                       .map(
                         (value) => ChoiceChip(
-                          label: Text(value),
+                          label: Text(
+                            query.filterType == SearchFilterType.category
+                                ? '${LifeEventCategories.emojiFor(value)} $value'
+                                : '${EmotionTag.emojiFor(value)} $value',
+                          ),
                           selected: query.value == value,
                           onSelected: (_) => notifier.setValue(value),
                         ),
@@ -74,12 +88,25 @@ class SearchScreen extends ConsumerWidget {
             child: resultsAsync.when(
               data: (events) {
                 if (events.isEmpty) {
-                  return const EmptyView(message: '該当するライフイベントが見つかりませんでした');
+                  return const EmptyView(
+                    message: '条件に合うライフイベントが見つかりませんでした。\n別のジャンルや気持ちを選んでみてください。',
+                    icon: Icons.search_off,
+                  );
                 }
                 return ListView.builder(
-                  itemCount: events.length,
+                  padding: const EdgeInsets.only(bottom: 16),
+                  itemCount: events.length + 1,
                   itemBuilder: (context, index) {
-                    final event = events[index];
+                    if (index == 0) {
+                      return Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                        child: Text(
+                          '「${query.value}」のライフイベント ${events.length}件',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      );
+                    }
+                    final event = events[index - 1];
                     return LifeEventCard(
                       event: event,
                       onTap: () => context.push('/life-event/${event.eventId}'),
